@@ -18,7 +18,7 @@ from src.version import __version__
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Fullstack Template API",
+    title="Virtus API",
     description="FastAPI backend with authentication and AI integration",
     version=__version__,
     debug=get_settings().LOG_LEVEL == "DEBUG",

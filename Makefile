@@ -31,10 +31,10 @@
 	docker compose -f infrastructure/docker-compose.yml restart
 
     docker-migrate: ## Run migrations in Docker container
-	docker compose -f infrastructure/docker-compose.yml exec backend alembic upgrade head
+	docker compose -f infrastructure/docker-compose.yml exec virtus-backend alembic upgrade head
 
     docker-migrate-create: ## Create new migration in Docker (use MESSAGE="description")
-	docker compose -f infrastructure/docker-compose.yml exec backend alembic revision --autogenerate -m "$(MESSAGE)"
+	docker compose -f infrastructure/docker-compose.yml exec virtus-backend alembic revision --autogenerate -m "$(MESSAGE)"
 
     migrate: ## Run database migrations
 	cd app/backend && alembic upgrade head

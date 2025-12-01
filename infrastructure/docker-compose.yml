@@ -3,18 +3,18 @@ volumes:
   redis_data:
 
 networks:
-  fullstack-network:
+  virtus_network:
     driver: bridge
 
 services:
-  postgres_fullstack:
+  postgres_virtus:
     image: postgres:${COMPOSE_POSTGRES_VERSION:-16-alpine}
-    container_name: fullstack-postgres
+    container_name: virtus-postgres
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-fullstack_template}
+      POSTGRES_DB: ${POSTGRES_DB:-virtus_db}
     ports:
       - ${COMPOSE_POSTGRES_PORTS:-127.0.0.1:5432}:${POSTGRES_PORT:-5432}
     volumes:
@@ -25,31 +25,32 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - fullstack-network
+      - virtus_network
 
   postgres_test:
     image: postgres:16-alpine
-    container_name: fullstack-postgres-test
+    container_name: virtus-postgres-test
+    profiles: ["test"]
     restart: "no"
     environment:
       POSTGRES_USER: test
       POSTGRES_PASSWORD: test
-      POSTGRES_DB: fullstack_test
+      POSTGRES_DB: virtus_db_test
     ports:
       - "127.0.0.1:5433:5432"
     tmpfs:
       - /var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U test -d fullstack_test"]
+      test: ["CMD-SHELL", "pg_isready -U test -d virtus_db_test"]
       interval: 5s
       timeout: 3s
       retries: 3
     networks:
-      - fullstack-network
+      - virtus_network
 
-  redis_fullstack:
+  redis_virtus:
     image: redis:${COMPOSE_REDIS_VERSION:-7-alpine}
-    container_name: fullstack-redis
+    container_name: virtus-redis
     mem_limit: 5G
     restart: always
     stop_grace_period: 10s
@@ -76,14 +77,14 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - fullstack-network
+      - virtus_network
 
-  backend:
+  virtus-backend:
     build:
       context: ..
       dockerfile: infrastructure/docker/Dockerfile.backend
-    image: fullstack-backend:${COMPOSE_BACKEND_VERSION:-latest}
-    container_name: fullstack-backend
+    image: virtus-backend:${COMPOSE_BACKEND_VERSION:-latest}
+    container_name: virtus-backend
     env_file:
       - ../.env
     pull_policy: never
@@ -100,9 +101,9 @@ services:
     ports:
       - ${COMPOSE_BACKEND_PORTS:-8000}:${BACKEND_PORT:-8000}
     depends_on:
-      postgres_fullstack:
+      postgres_virtus:
         condition: service_healthy
-      redis_fullstack:
+      redis_virtus:
         condition: service_healthy
     networks:
-      - fullstack-network
+      - virtus_network

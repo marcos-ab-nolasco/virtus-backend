@@ -22,6 +22,7 @@ AI_PROVIDER_REGISTRY: dict[str, dict[str, Any]] = {
             {"value": "gpt-4o-mini", "label": "GPT-4o Mini"},
             {"value": "gpt-4-turbo", "label": "GPT-4 Turbo"},
             {"value": "gpt-3.5-turbo", "label": "GPT-3.5 Turbo"},
+            {"value": "gpt-5-nano-2025-08-07", "label": "GPT-5 Nano"},
         ],
         "is_configured": lambda settings: bool(settings.OPENAI_API_KEY),
     },

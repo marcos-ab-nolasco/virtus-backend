@@ -42,9 +42,9 @@ jobs:
         env:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
-          POSTGRES_DB: fullstack_test
+          POSTGRES_DB: virtus_db_test
         options: >-
-          --health-cmd "pg_isready -U test -d fullstack_test"
+          --health-cmd "pg_isready -U test -d virtus_db_test"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 3
@@ -62,5 +62,5 @@ jobs:
       - name: Run backend tests
         working-directory: app/backend
         env:
-          DATABASE_URL: postgresql+asyncpg://test:test@postgres:5432/fullstack_test
+          DATABASE_URL: postgresql+asyncpg://test:test@postgres:5432/virtus_db_test
         run: uv run pytest -v
