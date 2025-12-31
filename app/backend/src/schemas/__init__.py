@@ -12,6 +12,15 @@ from src.schemas.chat import (
     MessageRead,
 )
 from src.schemas.user import UserCreate, UserRead
+from src.schemas.user_profile import (
+    AnnualObjectiveItem,
+    LifeDashboardSchema,
+    MoralProfileSchema,
+    ObservedPatternItem,
+    UserProfileCreate,
+    UserProfileResponse,
+    UserProfileUpdate,
+)
 
 __all__ = [
     "Token",
@@ -27,4 +36,11 @@ __all__ = [
     "MessageCreateResponse",
     "AIProvider",
     "AIProviderList",
+    "UserProfileCreate",
+    "UserProfileUpdate",
+    "UserProfileResponse",
+    "AnnualObjectiveItem",
+    "LifeDashboardSchema",
+    "ObservedPatternItem",
+    "MoralProfileSchema",
 ]
