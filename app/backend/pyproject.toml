@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "backend"
 dynamic = ["version"]
-description = "FastAPI backend for fullstack template"
+description = "FastAPI backend for virtus backend"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi",

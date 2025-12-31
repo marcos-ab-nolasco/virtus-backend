@@ -69,5 +69,5 @@ dmypy.json
 .ruff_cache/
 
 # Prompts
-CLAUDE.md
-historic_chat/
+.claude/
+planning/
