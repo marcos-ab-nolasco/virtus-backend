@@ -9,6 +9,7 @@ from src.db.session import Base
 
 if TYPE_CHECKING:
     from src.db.models.conversation import Conversation
+    from src.db.models.user_preferences import UserPreferences
     from src.db.models.user_profile import UserProfile
 
 
@@ -36,6 +37,9 @@ class User(Base):
     )
     profile: Mapped["UserProfile"] = relationship(
         "UserProfile", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
+    preferences: Mapped["UserPreferences"] = relationship(
+        "UserPreferences", back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:

@@ -12,6 +12,10 @@ from src.schemas.chat import (
     MessageRead,
 )
 from src.schemas.user import UserCreate, UserRead
+from src.schemas.user_preferences import (
+    UserPreferencesResponse,
+    UserPreferencesUpdate,
+)
 from src.schemas.user_profile import (
     AnnualObjectiveItem,
     LifeDashboardSchema,
@@ -43,4 +47,6 @@ __all__ = [
     "LifeDashboardSchema",
     "ObservedPatternItem",
     "MoralProfileSchema",
+    "UserPreferencesUpdate",
+    "UserPreferencesResponse",
 ]

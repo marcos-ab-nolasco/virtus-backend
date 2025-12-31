@@ -24,6 +24,7 @@ dependencies = [
     "anthropic",
     "tenacity",
     "slowapi>=0.1.9",
+    "pytz>=2025.2",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +39,7 @@ dev = [
     "mypy",
     "types-python-jose",
     "fakeredis",
+    "types-pytz>=2025.2.0.20251108",
 ]
 
 [tool.hatch.version]
