@@ -19,7 +19,7 @@ async def test_get_my_preferences_success(client: AsyncClient, test_user: User, 
     assert data["user_id"] == str(test_user.id)
     assert data["timezone"] == "UTC"
     assert data["morning_checkin_enabled"] is True
-    assert data["communication_style"] == "direct"
+    assert data["communication_style"] == "DIRECT"
     assert data["coach_name"] == "Virtus"
 
 
@@ -87,7 +87,7 @@ async def test_patch_my_preferences_update_communication_style(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["communication_style"] == "gentle"
+    assert data["communication_style"] == "GENTLE"
     assert data["coach_name"] == "Athena"
 
 

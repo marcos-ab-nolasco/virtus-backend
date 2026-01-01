@@ -17,7 +17,7 @@ async def test_get_my_profile_success(client: AsyncClient, test_user: User, auth
     assert response.status_code == 200
     data = response.json()
     assert data["user_id"] == str(test_user.id)
-    assert data["onboarding_status"] == "not_started"
+    assert data["onboarding_status"] == "NOT_STARTED"
     assert "id" in data
     assert "created_at" in data
 

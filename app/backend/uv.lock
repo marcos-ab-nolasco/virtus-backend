@@ -143,7 +143,6 @@ dependencies = [
     { name = "slowapi" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "tenacity" },
-    { name = "types-pytz" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -159,6 +158,7 @@ dev = [
     { name = "python-dotenv" },
     { name = "ruff" },
     { name = "types-python-jose" },
+    { name = "types-pytz" },
 ]
 
 [package.metadata]
@@ -189,7 +189,7 @@ requires-dist = [
     { name = "sqlalchemy", extras = ["asyncio"] },
     { name = "tenacity" },
     { name = "types-python-jose", marker = "extra == 'dev'" },
-    { name = "types-pytz", specifier = ">=2025.2.0.20251108" },
+    { name = "types-pytz", marker = "extra == 'dev'", specifier = ">=2025.2.0.20251108" },
     { name = "uvicorn", extras = ["standard"] },
 ]
 provides-extras = ["dev"]

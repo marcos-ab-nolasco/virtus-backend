@@ -16,21 +16,21 @@ if TYPE_CHECKING:
 class WeekDay(str, enum.Enum):
     """Days of the week for weekly review scheduling."""
 
-    MONDAY = "monday"
-    TUESDAY = "tuesday"
-    WEDNESDAY = "wednesday"
-    THURSDAY = "thursday"
-    FRIDAY = "friday"
-    SATURDAY = "saturday"
-    SUNDAY = "sunday"
+    MONDAY = "MONDAY"
+    TUESDAY = "TUESDAY"
+    WEDNESDAY = "WEDNESDAY"
+    THURSDAY = "THURSDAY"
+    FRIDAY = "FRIDAY"
+    SATURDAY = "SATURDAY"
+    SUNDAY = "SUNDAY"
 
 
 class CommunicationStyle(str, enum.Enum):
     """AI communication style preferences."""
 
-    DIRECT = "direct"
-    GENTLE = "gentle"
-    MOTIVATING = "motivating"
+    DIRECT = "DIRECT"
+    GENTLE = "GENTLE"
+    MOTIVATING = "MOTIVATING"
 
 
 class UserPreferences(Base):

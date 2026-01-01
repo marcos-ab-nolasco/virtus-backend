@@ -17,9 +17,9 @@ if TYPE_CHECKING:
 class OnboardingStatus(str, enum.Enum):
     """Onboarding workflow states."""
 
-    NOT_STARTED = "not_started"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
+    NOT_STARTED = "NOT_STARTED"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
 
 
 class UserProfile(Base):

@@ -13,12 +13,12 @@ class UserPreferencesBase(BaseModel):
     evening_checkin_enabled: bool = Field(default=True, description="Enable evening check-ins")
     evening_checkin_time: time = Field(default=time(21, 0), description="Evening check-in time")
     weekly_review_day: str = Field(
-        default="sunday",
-        description="Preferred day for weekly review (monday-sunday)",
+        default="SUNDAY",
+        description="Preferred day for weekly review (MONDAY-SUNDAY, case-insensitive)",
     )
     communication_style: str = Field(
-        default="direct",
-        description="AI communication style (direct, gentle, motivating)",
+        default="DIRECT",
+        description="AI communication style (DIRECT, GENTLE, MOTIVATING, case-insensitive)",
     )
     coach_name: str = Field(
         default="Virtus",
@@ -40,20 +40,20 @@ class UserPreferencesBase(BaseModel):
     @field_validator("weekly_review_day")
     @classmethod
     def validate_weekly_review_day(cls, v: str) -> str:
-        """Validate weekly review day."""
-        valid_days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-        if v.lower() not in valid_days:
+        """Validate weekly review day (accepts case-insensitive, returns UPPERCASE)."""
+        valid_days = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
+        if v.upper() not in valid_days:
             raise ValueError(f"Invalid day: {v}. Must be one of {valid_days}")
-        return v.lower()
+        return v.upper()
 
     @field_validator("communication_style")
     @classmethod
     def validate_communication_style(cls, v: str) -> str:
-        """Validate communication style."""
-        valid_styles = ["direct", "gentle", "motivating"]
-        if v.lower() not in valid_styles:
+        """Validate communication style (accepts case-insensitive, returns UPPERCASE)."""
+        valid_styles = ["DIRECT", "GENTLE", "MOTIVATING"]
+        if v.upper() not in valid_styles:
             raise ValueError(f"Invalid style: {v}. Must be one of {valid_styles}")
-        return v.lower()
+        return v.upper()
 
 
 class UserPreferencesUpdate(BaseModel):
@@ -93,26 +93,26 @@ class UserPreferencesUpdate(BaseModel):
     @field_validator("weekly_review_day")
     @classmethod
     def validate_weekly_review_day(cls, v: str | None) -> str | None:
-        """Validate weekly review day."""
+        """Validate weekly review day (accepts case-insensitive, returns UPPERCASE)."""
         if v is None:
             return v
 
-        valid_days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-        if v.lower() not in valid_days:
+        valid_days = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
+        if v.upper() not in valid_days:
             raise ValueError(f"Invalid day: {v}. Must be one of {valid_days}")
-        return v.lower()
+        return v.upper()
 
     @field_validator("communication_style")
     @classmethod
     def validate_communication_style(cls, v: str | None) -> str | None:
-        """Validate communication style."""
+        """Validate communication style (accepts case-insensitive, returns UPPERCASE)."""
         if v is None:
             return v
 
-        valid_styles = ["direct", "gentle", "motivating"]
-        if v.lower() not in valid_styles:
+        valid_styles = ["DIRECT", "GENTLE", "MOTIVATING"]
+        if v.upper() not in valid_styles:
             raise ValueError(f"Invalid style: {v}. Must be one of {valid_styles}")
-        return v.lower()
+        return v.upper()
 
 
 class UserPreferencesResponse(UserPreferencesBase):
