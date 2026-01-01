@@ -219,9 +219,7 @@ async def test_onboarding_status_enum_validation(db_session: AsyncSession):
         await db_session.refresh(user)
 
         # Get the auto-created profile
-        result = await db_session.execute(
-            select(UserProfile).where(UserProfile.user_id == user.id)
-        )
+        result = await db_session.execute(select(UserProfile).where(UserProfile.user_id == user.id))
         profile = result.scalar_one()
 
         # Update the status

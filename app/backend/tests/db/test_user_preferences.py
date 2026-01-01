@@ -79,9 +79,7 @@ async def test_user_preferences_cascade_delete(db_session: AsyncSession, test_us
     await db_session.commit()
 
     # Verify preferences was also deleted
-    result = await db_session.execute(
-        select(UserPreferences).where(UserPreferences.id == prefs_id)
-    )
+    result = await db_session.execute(select(UserPreferences).where(UserPreferences.id == prefs_id))
     deleted_prefs = result.scalar_one_or_none()
     assert deleted_prefs is None
 
