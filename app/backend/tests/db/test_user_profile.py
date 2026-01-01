@@ -6,21 +6,19 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.security import hash_password
 from src.db.models.user import User
 from src.db.models.user_profile import OnboardingStatus, UserProfile
 
 
 @pytest.mark.asyncio
-async def test_create_user_profile_with_required_fields(db_session: AsyncSession, test_user: User):
-    """Test creating UserProfile with only required fields."""
-    profile = UserProfile(
-        user_id=test_user.id,
-        onboarding_status=OnboardingStatus.NOT_STARTED,
+async def test_user_has_auto_created_profile(db_session: AsyncSession, test_user: User):
+    """Test that UserProfile is automatically created when User is created."""
+    # Query for the auto-created profile
+    result = await db_session.execute(
+        select(UserProfile).where(UserProfile.user_id == test_user.id)
     )
-
-    db_session.add(profile)
-    await db_session.commit()
-    await db_session.refresh(profile)
+    profile = result.scalar_one()
 
     assert profile.id is not None
     assert isinstance(profile.id, uuid.UUID)
@@ -46,15 +44,8 @@ async def test_user_profile_requires_user_id(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_user_profile_unique_constraint_on_user_id(db_session: AsyncSession, test_user: User):
     """Test that only one UserProfile can exist per user."""
-    # Create first profile
-    profile1 = UserProfile(
-        user_id=test_user.id,
-        onboarding_status=OnboardingStatus.NOT_STARTED,
-    )
-    db_session.add(profile1)
-    await db_session.commit()
-
-    # Try to create second profile for same user
+    # test_user already has an auto-created profile
+    # Try to create a second profile for the same user
     profile2 = UserProfile(
         user_id=test_user.id,
         onboarding_status=OnboardingStatus.IN_PROGRESS,
@@ -68,13 +59,11 @@ async def test_user_profile_unique_constraint_on_user_id(db_session: AsyncSessio
 @pytest.mark.asyncio
 async def test_user_profile_relationship_with_user(db_session: AsyncSession, test_user: User):
     """Test that UserProfile has a relationship with User."""
-    profile = UserProfile(
-        user_id=test_user.id,
-        onboarding_status=OnboardingStatus.NOT_STARTED,
+    # Get the auto-created profile
+    result = await db_session.execute(
+        select(UserProfile).where(UserProfile.user_id == test_user.id)
     )
-    db_session.add(profile)
-    await db_session.commit()
-    await db_session.refresh(profile)
+    profile = result.scalar_one()
 
     # Access relationship
     assert profile.user is not None
@@ -85,14 +74,11 @@ async def test_user_profile_relationship_with_user(db_session: AsyncSession, tes
 @pytest.mark.asyncio
 async def test_user_profile_cascade_delete_with_user(db_session: AsyncSession, test_user: User):
     """Test that deleting a User cascades to UserProfile."""
-    # Create profile for user
-    profile = UserProfile(
-        user_id=test_user.id,
-        onboarding_status=OnboardingStatus.NOT_STARTED,
+    # Get the auto-created profile
+    result = await db_session.execute(
+        select(UserProfile).where(UserProfile.user_id == test_user.id)
     )
-    db_session.add(profile)
-    await db_session.commit()
-
+    profile = result.scalar_one()
     profile_id = profile.id
 
     # Delete the user
@@ -107,16 +93,14 @@ async def test_user_profile_cascade_delete_with_user(db_session: AsyncSession, t
 
 @pytest.mark.asyncio
 async def test_user_profile_jsonb_fields_nullable(db_session: AsyncSession, test_user: User):
-    """Test that JSONB fields can be null."""
-    profile = UserProfile(
-        user_id=test_user.id,
-        onboarding_status=OnboardingStatus.NOT_STARTED,
-        # All JSONB fields omitted (should be nullable)
+    """Test that JSONB fields are null by default in auto-created profile."""
+    # Get the auto-created profile
+    result = await db_session.execute(
+        select(UserProfile).where(UserProfile.user_id == test_user.id)
     )
-    db_session.add(profile)
-    await db_session.commit()
-    await db_session.refresh(profile)
+    profile = result.scalar_one()
 
+    # Verify JSONB fields are null
     assert profile.vision_5_years is None
     assert profile.current_challenge is None
     assert profile.annual_objectives is None
@@ -143,12 +127,14 @@ async def test_annual_objectives_jsonb_structure(db_session: AsyncSession, test_
         },
     ]
 
-    profile = UserProfile(
-        user_id=test_user.id,
-        onboarding_status=OnboardingStatus.IN_PROGRESS,
-        annual_objectives=annual_objectives,
+    # Get the auto-created profile and update it
+    result = await db_session.execute(
+        select(UserProfile).where(UserProfile.user_id == test_user.id)
     )
-    db_session.add(profile)
+    profile = result.scalar_one()
+
+    profile.onboarding_status = OnboardingStatus.IN_PROGRESS
+    profile.annual_objectives = annual_objectives
     await db_session.commit()
     await db_session.refresh(profile)
 
@@ -168,12 +154,13 @@ async def test_life_dashboard_jsonb_structure(db_session: AsyncSession, test_use
         "personal_time": 5,
     }
 
-    profile = UserProfile(
-        user_id=test_user.id,
-        onboarding_status=OnboardingStatus.IN_PROGRESS,
-        life_dashboard=life_dashboard,
+    # Get the auto-created profile and update it
+    result = await db_session.execute(
+        select(UserProfile).where(UserProfile.user_id == test_user.id)
     )
-    db_session.add(profile)
+    profile = result.scalar_one()
+
+    profile.life_dashboard = life_dashboard
     await db_session.commit()
     await db_session.refresh(profile)
 
@@ -196,12 +183,14 @@ async def test_moral_profile_jsonb_structure(db_session: AsyncSession, test_user
         "liberty": 0.9,
     }
 
-    profile = UserProfile(
-        user_id=test_user.id,
-        onboarding_status=OnboardingStatus.COMPLETED,
-        moral_profile=moral_profile,
+    # Get the auto-created profile and update it
+    result = await db_session.execute(
+        select(UserProfile).where(UserProfile.user_id == test_user.id)
     )
-    db_session.add(profile)
+    profile = result.scalar_one()
+
+    profile.onboarding_status = OnboardingStatus.COMPLETED
+    profile.moral_profile = moral_profile
     await db_session.commit()
     await db_session.refresh(profile)
 
@@ -211,27 +200,36 @@ async def test_moral_profile_jsonb_structure(db_session: AsyncSession, test_user
 
 
 @pytest.mark.asyncio
-async def test_onboarding_status_enum_validation(db_session: AsyncSession, test_user: User):
+async def test_onboarding_status_enum_validation(db_session: AsyncSession):
     """Test that onboarding_status uses valid enum values."""
-    # Test all valid enum values
+    # Test all valid enum values by creating different users and updating their profiles
     for status in [
         OnboardingStatus.NOT_STARTED,
         OnboardingStatus.IN_PROGRESS,
         OnboardingStatus.COMPLETED,
     ]:
-        profile = UserProfile(
-            user_id=test_user.id,
-            onboarding_status=status,
+        # Create a new user (which auto-creates profile)
+        user = User(
+            email=f"test_{status.value}@example.com",
+            hashed_password=hash_password("testpassword123"),
+            full_name=f"Test User {status.value}",
         )
-        db_session.add(profile)
+        db_session.add(user)
+        await db_session.commit()
+        await db_session.refresh(user)
+
+        # Get the auto-created profile
+        result = await db_session.execute(
+            select(UserProfile).where(UserProfile.user_id == user.id)
+        )
+        profile = result.scalar_one()
+
+        # Update the status
+        profile.onboarding_status = status
         await db_session.commit()
         await db_session.refresh(profile)
 
         assert profile.onboarding_status == status
-
-        # Clean up for next iteration
-        await db_session.delete(profile)
-        await db_session.commit()
 
 
 @pytest.mark.asyncio
@@ -250,12 +248,13 @@ async def test_observed_patterns_jsonb_structure(db_session: AsyncSession, test_
         },
     ]
 
-    profile = UserProfile(
-        user_id=test_user.id,
-        onboarding_status=OnboardingStatus.COMPLETED,
-        observed_patterns=observed_patterns,
+    # Get the auto-created profile and update it
+    result = await db_session.execute(
+        select(UserProfile).where(UserProfile.user_id == test_user.id)
     )
-    db_session.add(profile)
+    profile = result.scalar_one()
+
+    profile.observed_patterns = observed_patterns
     await db_session.commit()
     await db_session.refresh(profile)
 
@@ -268,12 +267,11 @@ async def test_observed_patterns_jsonb_structure(db_session: AsyncSession, test_
 @pytest.mark.asyncio
 async def test_user_profile_update_fields(db_session: AsyncSession, test_user: User):
     """Test updating UserProfile fields."""
-    profile = UserProfile(
-        user_id=test_user.id,
-        onboarding_status=OnboardingStatus.NOT_STARTED,
+    # Get the auto-created profile
+    result = await db_session.execute(
+        select(UserProfile).where(UserProfile.user_id == test_user.id)
     )
-    db_session.add(profile)
-    await db_session.commit()
+    profile = result.scalar_one()
 
     # Update fields
     profile.vision_5_years = "Become a tech leader"

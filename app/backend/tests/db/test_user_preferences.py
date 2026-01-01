@@ -6,20 +6,21 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.security import hash_password
 from src.db.models.user import User
 from src.db.models.user_preferences import CommunicationStyle, UserPreferences, WeekDay
 
 
 @pytest.mark.asyncio
-async def test_create_user_preferences_with_defaults(db_session: AsyncSession, test_user: User):
-    """Test creating UserPreferences with default values."""
-    preferences = UserPreferences(
-        user_id=test_user.id,
+async def test_user_has_auto_created_preferences_with_defaults(
+    db_session: AsyncSession, test_user: User
+):
+    """Test that UserPreferences is automatically created with default values when User is created."""
+    # Query for the auto-created preferences
+    result = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.user_id == test_user.id)
     )
-
-    db_session.add(preferences)
-    await db_session.commit()
-    await db_session.refresh(preferences)
+    preferences = result.scalar_one()
 
     assert preferences.id is not None
     assert isinstance(preferences.id, uuid.UUID)
@@ -39,12 +40,8 @@ async def test_create_user_preferences_with_defaults(db_session: AsyncSession, t
 @pytest.mark.asyncio
 async def test_user_preferences_unique_constraint(db_session: AsyncSession, test_user: User):
     """Test that only one UserPreferences can exist per user."""
-    # Create first preferences
-    prefs1 = UserPreferences(user_id=test_user.id)
-    db_session.add(prefs1)
-    await db_session.commit()
-
-    # Try to create second preferences for same user
+    # test_user already has auto-created preferences
+    # Try to create a second preferences for the same user
     prefs2 = UserPreferences(user_id=test_user.id)
     db_session.add(prefs2)
 
@@ -55,10 +52,11 @@ async def test_user_preferences_unique_constraint(db_session: AsyncSession, test
 @pytest.mark.asyncio
 async def test_user_preferences_relationship_with_user(db_session: AsyncSession, test_user: User):
     """Test that UserPreferences has a relationship with User."""
-    preferences = UserPreferences(user_id=test_user.id)
-    db_session.add(preferences)
-    await db_session.commit()
-    await db_session.refresh(preferences)
+    # Get the auto-created preferences
+    result = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.user_id == test_user.id)
+    )
+    preferences = result.scalar_one()
 
     # Access relationship
     assert preferences.user is not None
@@ -69,11 +67,11 @@ async def test_user_preferences_relationship_with_user(db_session: AsyncSession,
 @pytest.mark.asyncio
 async def test_user_preferences_cascade_delete(db_session: AsyncSession, test_user: User):
     """Test that deleting a User cascades to UserPreferences."""
-    # Create preferences for user
-    preferences = UserPreferences(user_id=test_user.id)
-    db_session.add(preferences)
-    await db_session.commit()
-
+    # Get the auto-created preferences
+    result = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.user_id == test_user.id)
+    )
+    preferences = result.scalar_one()
     prefs_id = preferences.id
 
     # Delete the user
@@ -81,7 +79,9 @@ async def test_user_preferences_cascade_delete(db_session: AsyncSession, test_us
     await db_session.commit()
 
     # Verify preferences was also deleted
-    result = await db_session.execute(select(UserPreferences).where(UserPreferences.id == prefs_id))
+    result = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.id == prefs_id)
+    )
     deleted_prefs = result.scalar_one_or_none()
     assert deleted_prefs is None
 
@@ -89,11 +89,13 @@ async def test_user_preferences_cascade_delete(db_session: AsyncSession, test_us
 @pytest.mark.asyncio
 async def test_timezone_custom_value(db_session: AsyncSession, test_user: User):
     """Test setting a custom timezone."""
-    preferences = UserPreferences(
-        user_id=test_user.id,
-        timezone="America/Sao_Paulo",
+    # Get the auto-created preferences and update it
+    result = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.user_id == test_user.id)
     )
-    db_session.add(preferences)
+    preferences = result.scalar_one()
+
+    preferences.timezone = "America/Sao_Paulo"
     await db_session.commit()
     await db_session.refresh(preferences)
 
@@ -102,11 +104,12 @@ async def test_timezone_custom_value(db_session: AsyncSession, test_user: User):
 
 @pytest.mark.asyncio
 async def test_checkin_time_defaults(db_session: AsyncSession, test_user: User):
-    """Test default check-in times are set correctly."""
-    preferences = UserPreferences(user_id=test_user.id)
-    db_session.add(preferences)
-    await db_session.commit()
-    await db_session.refresh(preferences)
+    """Test default check-in times are set correctly in auto-created preferences."""
+    # Get the auto-created preferences
+    result = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.user_id == test_user.id)
+    )
+    preferences = result.scalar_one()
 
     assert preferences.morning_checkin_time == time(8, 0)
     assert preferences.evening_checkin_time == time(21, 0)
@@ -115,12 +118,14 @@ async def test_checkin_time_defaults(db_session: AsyncSession, test_user: User):
 @pytest.mark.asyncio
 async def test_checkin_time_custom_values(db_session: AsyncSession, test_user: User):
     """Test setting custom check-in times."""
-    preferences = UserPreferences(
-        user_id=test_user.id,
-        morning_checkin_time=time(6, 30),
-        evening_checkin_time=time(22, 15),
+    # Get the auto-created preferences and update it
+    result = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.user_id == test_user.id)
     )
-    db_session.add(preferences)
+    preferences = result.scalar_one()
+
+    preferences.morning_checkin_time = time(6, 30)
+    preferences.evening_checkin_time = time(22, 15)
     await db_session.commit()
     await db_session.refresh(preferences)
 
@@ -129,57 +134,76 @@ async def test_checkin_time_custom_values(db_session: AsyncSession, test_user: U
 
 
 @pytest.mark.asyncio
-async def test_communication_style_enum(db_session: AsyncSession, test_user: User):
+async def test_communication_style_enum(db_session: AsyncSession):
     """Test communication_style enum values."""
     for style in [
         CommunicationStyle.DIRECT,
         CommunicationStyle.GENTLE,
         CommunicationStyle.MOTIVATING,
     ]:
-        preferences = UserPreferences(
-            user_id=test_user.id,
-            communication_style=style,
+        # Create a new user (which auto-creates preferences)
+        user = User(
+            email=f"test_{style.value}@example.com",
+            hashed_password=hash_password("testpassword123"),
+            full_name=f"Test User {style.value}",
         )
-        db_session.add(preferences)
+        db_session.add(user)
+        await db_session.commit()
+        await db_session.refresh(user)
+
+        # Get the auto-created preferences
+        result = await db_session.execute(
+            select(UserPreferences).where(UserPreferences.user_id == user.id)
+        )
+        preferences = result.scalar_one()
+
+        # Update the communication style
+        preferences.communication_style = style
         await db_session.commit()
         await db_session.refresh(preferences)
 
         assert preferences.communication_style == style
 
-        # Clean up for next iteration
-        await db_session.delete(preferences)
-        await db_session.commit()
-
 
 @pytest.mark.asyncio
-async def test_weekly_review_day_enum(db_session: AsyncSession, test_user: User):
+async def test_weekly_review_day_enum(db_session: AsyncSession):
     """Test weekly_review_day enum values."""
     # Test a few different days
     test_days = [WeekDay.MONDAY, WeekDay.FRIDAY, WeekDay.SUNDAY]
 
     for day in test_days:
-        preferences = UserPreferences(
-            user_id=test_user.id,
-            weekly_review_day=day,
+        # Create a new user (which auto-creates preferences)
+        user = User(
+            email=f"test_{day.value}@example.com",
+            hashed_password=hash_password("testpassword123"),
+            full_name=f"Test User {day.value}",
         )
-        db_session.add(preferences)
+        db_session.add(user)
+        await db_session.commit()
+        await db_session.refresh(user)
+
+        # Get the auto-created preferences
+        result = await db_session.execute(
+            select(UserPreferences).where(UserPreferences.user_id == user.id)
+        )
+        preferences = result.scalar_one()
+
+        # Update the weekly review day
+        preferences.weekly_review_day = day
         await db_session.commit()
         await db_session.refresh(preferences)
 
         assert preferences.weekly_review_day == day
 
-        # Clean up for next iteration
-        await db_session.delete(preferences)
-        await db_session.commit()
-
 
 @pytest.mark.asyncio
 async def test_coach_name_default(db_session: AsyncSession, test_user: User):
-    """Test default coach name is 'Virtus'."""
-    preferences = UserPreferences(user_id=test_user.id)
-    db_session.add(preferences)
-    await db_session.commit()
-    await db_session.refresh(preferences)
+    """Test default coach name is 'Virtus' in auto-created preferences."""
+    # Get the auto-created preferences
+    result = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.user_id == test_user.id)
+    )
+    preferences = result.scalar_one()
 
     assert preferences.coach_name == "Virtus"
 
@@ -187,11 +211,13 @@ async def test_coach_name_default(db_session: AsyncSession, test_user: User):
 @pytest.mark.asyncio
 async def test_coach_name_custom_value(db_session: AsyncSession, test_user: User):
     """Test setting a custom coach name."""
-    preferences = UserPreferences(
-        user_id=test_user.id,
-        coach_name="Athena",
+    # Get the auto-created preferences and update it
+    result = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.user_id == test_user.id)
     )
-    db_session.add(preferences)
+    preferences = result.scalar_one()
+
+    preferences.coach_name = "Athena"
     await db_session.commit()
     await db_session.refresh(preferences)
 
@@ -201,12 +227,14 @@ async def test_coach_name_custom_value(db_session: AsyncSession, test_user: User
 @pytest.mark.asyncio
 async def test_checkin_enabled_flags(db_session: AsyncSession, test_user: User):
     """Test check-in enabled flags can be disabled."""
-    preferences = UserPreferences(
-        user_id=test_user.id,
-        morning_checkin_enabled=False,
-        evening_checkin_enabled=False,
+    # Get the auto-created preferences and update it
+    result = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.user_id == test_user.id)
     )
-    db_session.add(preferences)
+    preferences = result.scalar_one()
+
+    preferences.morning_checkin_enabled = False
+    preferences.evening_checkin_enabled = False
     await db_session.commit()
     await db_session.refresh(preferences)
 
@@ -217,9 +245,11 @@ async def test_checkin_enabled_flags(db_session: AsyncSession, test_user: User):
 @pytest.mark.asyncio
 async def test_update_preferences(db_session: AsyncSession, test_user: User):
     """Test updating UserPreferences fields."""
-    preferences = UserPreferences(user_id=test_user.id)
-    db_session.add(preferences)
-    await db_session.commit()
+    # Get the auto-created preferences
+    result = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.user_id == test_user.id)
+    )
+    preferences = result.scalar_one()
 
     # Update fields
     preferences.timezone = "Europe/London"

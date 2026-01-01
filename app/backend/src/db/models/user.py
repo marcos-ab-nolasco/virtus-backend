@@ -1,9 +1,10 @@
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from sqlalchemy import DateTime, String, Uuid, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import DateTime, String, Uuid, event, func
+from sqlalchemy.engine import Connection
+from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
 from src.db.session import Base
 
@@ -44,3 +45,32 @@ class User(Base):
 
     def __repr__(self) -> str:
         return f"<User(id={self.id}, email={self.email})>"
+
+
+# Event listener to auto-create UserProfile and UserPreferences after User insert
+@event.listens_for(User, "after_insert")
+def create_user_profile_and_preferences(
+    mapper: Mapper[Any], connection: Connection, target: User
+) -> None:
+    """Automatically create UserProfile and UserPreferences after User insert.
+
+    This ensures every user has a profile and preferences record from the start.
+    Uses raw SQL via connection to avoid session conflicts during the insert event.
+    """
+    from src.db.models.user_preferences import UserPreferences
+    from src.db.models.user_profile import OnboardingStatus, UserProfile
+
+    # Insert UserProfile with default onboarding status
+    connection.execute(
+        UserProfile.__table__.insert().values(  # type: ignore[attr-defined]
+            user_id=target.id,
+            onboarding_status=OnboardingStatus.NOT_STARTED,
+        )
+    )
+
+    # Insert UserPreferences (defaults handled by column defaults)
+    connection.execute(
+        UserPreferences.__table__.insert().values(  # type: ignore[attr-defined]
+            user_id=target.id,
+        )
+    )
