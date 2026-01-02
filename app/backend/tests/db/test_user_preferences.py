@@ -273,3 +273,66 @@ async def test_user_preferences_requires_user_id(db_session: AsyncSession):
 
     with pytest.raises(IntegrityError):
         await db_session.commit()
+
+
+# Tests for new UserPreferences fields (M01 expansion)
+
+
+@pytest.mark.asyncio
+async def test_week_start_day_field(db_session: AsyncSession, test_user: User):
+    """Test that UserPreferences has week_start_day field (separate from weekly_review_day)."""
+    result = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.user_id == test_user.id)
+    )
+    preferences = result.scalar_one()
+
+    # Should have week_start_day attribute
+    assert hasattr(preferences, "week_start_day")
+
+    # Should default to MONDAY
+    assert preferences.week_start_day == WeekDay.MONDAY
+
+    # Should be settable
+    preferences.week_start_day = WeekDay.SUNDAY
+    await db_session.commit()
+    await db_session.refresh(preferences)
+
+    assert preferences.week_start_day == WeekDay.SUNDAY
+
+
+@pytest.mark.asyncio
+async def test_language_field_default(db_session: AsyncSession, test_user: User):
+    """Test that UserPreferences has language field with 'pt-BR' default."""
+    result = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.user_id == test_user.id)
+    )
+    preferences = result.scalar_one()
+
+    # Should have language attribute
+    assert hasattr(preferences, "language")
+
+    # Should default to "pt-BR"
+    assert preferences.language == "pt-BR"
+
+
+@pytest.mark.asyncio
+async def test_language_field_custom_value(db_session: AsyncSession, test_user: User):
+    """Test setting a custom language value."""
+    result = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.user_id == test_user.id)
+    )
+    preferences = result.scalar_one()
+
+    # Should be settable to different languages
+    preferences.language = "en-US"
+    await db_session.commit()
+    await db_session.refresh(preferences)
+
+    assert preferences.language == "en-US"
+
+    # Test other language codes
+    preferences.language = "es-ES"
+    await db_session.commit()
+    await db_session.refresh(preferences)
+
+    assert preferences.language == "es-ES"

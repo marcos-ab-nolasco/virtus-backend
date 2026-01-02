@@ -95,6 +95,20 @@ class UserPreferences(Base):
         nullable=False,
     )
 
+    # Week start day (for calendar and planning)
+    week_start_day: Mapped[WeekDay] = mapped_column(
+        Enum(WeekDay, native_enum=False, name="week_day_enum"),
+        default=WeekDay.MONDAY,
+        nullable=False,
+    )
+
+    # Language preference
+    language: Mapped[str] = mapped_column(
+        String(10),
+        default="pt-BR",
+        nullable=False,
+    )
+
     # Communication preferences
     communication_style: Mapped[CommunicationStyle] = mapped_column(
         Enum(CommunicationStyle, native_enum=False, name="communication_style_enum"),

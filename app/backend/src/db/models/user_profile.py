@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Text, Uuid
+from sqlalchemy import ARRAY, DateTime, Enum, ForeignKey, Integer, String, Text, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -20,6 +20,58 @@ class OnboardingStatus(str, enum.Enum):
     NOT_STARTED = "NOT_STARTED"
     IN_PROGRESS = "IN_PROGRESS"
     COMPLETED = "COMPLETED"
+
+
+class LifeArea(str, enum.Enum):
+    """Life areas for objectives and satisfaction tracking."""
+
+    HEALTH = "HEALTH"
+    WORK = "WORK"
+    RELATIONSHIPS = "RELATIONSHIPS"
+    PERSONAL_TIME = "PERSONAL_TIME"
+
+
+class PatternType(str, enum.Enum):
+    """Types of observed behavioral patterns."""
+
+    ENERGY = "ENERGY"
+    PROCRASTINATION = "PROCRASTINATION"
+    STRESS = "STRESS"
+    COMMUNICATION = "COMMUNICATION"
+
+
+class StrengthCategory(str, enum.Enum):
+    """Categories of personal strengths."""
+
+    TECHNICAL = "TECHNICAL"
+    INTERPERSONAL = "INTERPERSONAL"
+    COGNITIVE = "COGNITIVE"
+    CREATIVE = "CREATIVE"
+    ORGANIZATIONAL = "ORGANIZATIONAL"
+
+
+class StrengthSource(str, enum.Enum):
+    """Source of strength identification."""
+
+    DECLARED = "DECLARED"
+    INFERRED = "INFERRED"
+
+
+class InterestType(str, enum.Enum):
+    """Types of interests."""
+
+    HOBBY = "HOBBY"
+    PROFESSIONAL_INTEREST = "PROFESSIONAL_INTEREST"
+    LEARNING_GOAL = "LEARNING_GOAL"
+    CURIOSITY = "CURIOSITY"
+
+
+class EngagementLevel(str, enum.Enum):
+    """Level of engagement with an interest."""
+
+    ACTIVE = "ACTIVE"
+    OCCASIONAL = "OCCASIONAL"
+    ASPIRATIONAL = "ASPIRATIONAL"
 
 
 class UserProfile(Base):
@@ -52,6 +104,10 @@ class UserProfile(Base):
         default=OnboardingStatus.NOT_STARTED,
         nullable=False,
     )
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -66,30 +122,80 @@ class UserProfile(Base):
         nullable=False,
     )
 
-    # Optional text fields (onboarding questions)
+    # Vision and challenges
     vision_5_years: Mapped[str | None] = mapped_column(Text, nullable=True)
-    current_challenge: Mapped[str | None] = mapped_column(Text, nullable=True)
+    vision_5_years_themes: Mapped[list[str] | None] = mapped_column(
+        ARRAY(String),
+        nullable=True,
+    )
+    main_obstacle: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # JSONB fields (structured data, validated via Pydantic)
     annual_objectives: Mapped[dict | None] = mapped_column(
         JSONB,
         nullable=True,
-        comment="Array of {id, description, life_area, priority}",
-    )
-    life_dashboard: Mapped[dict | None] = mapped_column(
-        JSONB,
-        nullable=True,
-        comment="Object with health, work, relationships, personal_time scores (1-10)",
+        comment="Array of {id, description, area, created_at}",
     )
     observed_patterns: Mapped[dict | None] = mapped_column(
         JSONB,
         nullable=True,
-        comment="Array of {pattern_type, description, confidence}",
+        comment="Array of {pattern_type, description, confidence, observed_at, evidence_count}",
     )
     moral_profile: Mapped[dict | None] = mapped_column(
         JSONB,
         nullable=True,
         comment="Object with care, fairness, loyalty, authority, purity, liberty scores (0-1)",
+    )
+
+    # Strengths and interests (M01 expansion)
+    strengths: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="Array of {id, description, category, source, confidence, evidence, created_at}",
+    )
+    interests: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="Array of {id, name, type, engagement_level, related_to_goals, created_at}",
+    )
+
+    # Energy and drain activities
+    energy_activities: Mapped[list[str] | None] = mapped_column(
+        ARRAY(String),
+        nullable=True,
+        comment="Activities that give energy",
+    )
+    drain_activities: Mapped[list[str] | None] = mapped_column(
+        ARRAY(String),
+        nullable=True,
+        comment="Activities that drain energy",
+    )
+
+    # Life satisfaction (individual fields replacing life_dashboard JSONB)
+    satisfaction_health: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Health satisfaction score (1-10)",
+    )
+    satisfaction_work: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Work satisfaction score (1-10)",
+    )
+    satisfaction_relationships: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Relationships satisfaction score (1-10)",
+    )
+    satisfaction_personal_time: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Personal time satisfaction score (1-10)",
+    )
+    dashboard_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Last update of satisfaction scores",
     )
 
     # Relationships
