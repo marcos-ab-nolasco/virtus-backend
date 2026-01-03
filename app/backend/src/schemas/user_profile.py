@@ -58,18 +58,47 @@ class MoralProfileSchema(BaseModel):
 class UserProfileBase(BaseModel):
     """Base schema with common UserProfile fields."""
 
+    # Vision and obstacles
     vision_5_years: str | None = Field(None, max_length=2000, description="User's 5-year vision")
-    current_challenge: str | None = Field(
-        None, max_length=2000, description="Current main challenge"
-    )
+    vision_5_years_themes: list[str] | None = Field(None, description="Key themes in 5-year vision")
+    main_obstacle: str | None = Field(None, max_length=2000, description="Current main obstacle")
+
+    # Objectives and patterns
     annual_objectives: list[AnnualObjectiveItem] | None = Field(
         None, description="List of annual objectives"
     )
-    life_dashboard: LifeDashboardSchema | None = Field(None, description="Life assessment scores")
     observed_patterns: list[ObservedPatternItem] | None = Field(
         None, description="AI-observed behavioral patterns"
     )
     moral_profile: MoralProfileSchema | None = Field(None, description="Moral foundations profile")
+
+    # Strengths and interests (JSONB validated)
+    strengths: dict | None = Field(None, description="User strengths (array of objects)")
+    interests: dict | None = Field(None, description="User interests (array of objects)")
+
+    # Energy management
+    energy_activities: list[str] | None = Field(None, description="Activities that give energy")
+    drain_activities: list[str] | None = Field(None, description="Activities that drain energy")
+
+    # Life satisfaction scores (individual fields, 1-10 scale)
+    satisfaction_health: int | None = Field(
+        None, ge=1, le=10, description="Health satisfaction (1-10)"
+    )
+    satisfaction_work: int | None = Field(None, ge=1, le=10, description="Work satisfaction (1-10)")
+    satisfaction_relationships: int | None = Field(
+        None, ge=1, le=10, description="Relationships satisfaction (1-10)"
+    )
+    satisfaction_personal_time: int | None = Field(
+        None, ge=1, le=10, description="Personal time satisfaction (1-10)"
+    )
+    dashboard_updated_at: datetime | None = Field(
+        None, description="Last update of satisfaction scores"
+    )
+
+    # Onboarding
+    onboarding_completed_at: datetime | None = Field(
+        None, description="When onboarding was completed"
+    )
 
 
 class UserProfileCreate(UserProfileBase):

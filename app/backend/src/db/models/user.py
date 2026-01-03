@@ -9,6 +9,8 @@ from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 from src.db.session import Base
 
 if TYPE_CHECKING:
+    from src.db.models.calendar_event import CalendarEvent
+    from src.db.models.calendar_integration import CalendarIntegration
     from src.db.models.conversation import Conversation
     from src.db.models.user_preferences import UserPreferences
     from src.db.models.user_profile import UserProfile
@@ -41,6 +43,16 @@ class User(Base):
     )
     preferences: Mapped["UserPreferences"] = relationship(
         "UserPreferences", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
+    calendar_integrations: Mapped[list["CalendarIntegration"]] = relationship(
+        "CalendarIntegration",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    calendar_events: Mapped[list["CalendarEvent"]] = relationship(
+        "CalendarEvent",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
 
     def __repr__(self) -> str:

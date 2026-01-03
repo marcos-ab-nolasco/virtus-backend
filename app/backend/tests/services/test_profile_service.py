@@ -43,7 +43,7 @@ async def test_update_user_profile_success(db_session: AsyncSession, test_user: 
     """Test updating user profile successfully."""
     update_data = UserProfileUpdate(
         vision_5_years="Become a tech leader in 5 years",
-        current_challenge="Work-life balance",
+        main_obstacle="Work-life balance",
     )
 
     updated_profile = await profile_service.update_user_profile(
@@ -51,7 +51,7 @@ async def test_update_user_profile_success(db_session: AsyncSession, test_user: 
     )
 
     assert updated_profile.vision_5_years == "Become a tech leader in 5 years"
-    assert updated_profile.current_challenge == "Work-life balance"
+    assert updated_profile.main_obstacle == "Work-life balance"
     assert updated_profile.user_id == test_user.id
 
 
@@ -61,7 +61,7 @@ async def test_update_user_profile_partial(db_session: AsyncSession, test_user: 
     # First set some data
     update_data_1 = UserProfileUpdate(
         vision_5_years="Initial vision",
-        current_challenge="Initial challenge",
+        main_obstacle="Initial challenge",
     )
     await profile_service.update_user_profile(db_session, test_user.id, update_data_1)
 
@@ -74,7 +74,7 @@ async def test_update_user_profile_partial(db_session: AsyncSession, test_user: 
     )
 
     assert updated_profile.vision_5_years == "Updated vision"
-    assert updated_profile.current_challenge == "Initial challenge"  # Unchanged
+    assert updated_profile.main_obstacle == "Initial challenge"  # Unchanged
 
 
 @pytest.mark.asyncio
@@ -89,7 +89,10 @@ async def test_update_user_profile_with_jsonb_fields(db_session: AsyncSession, t
                 "priority": 1,
             }
         ],
-        life_dashboard={"health": 7, "work": 8, "relationships": 6, "personal_time": 5},
+        satisfaction_health=7,
+        satisfaction_work=8,
+        satisfaction_relationships=6,
+        satisfaction_personal_time=5,
     )
 
     updated_profile = await profile_service.update_user_profile(
@@ -99,8 +102,8 @@ async def test_update_user_profile_with_jsonb_fields(db_session: AsyncSession, t
     assert updated_profile.annual_objectives is not None
     assert len(updated_profile.annual_objectives) == 1
     assert updated_profile.annual_objectives[0]["description"] == "Complete certification"
-    assert updated_profile.life_dashboard is not None
-    assert updated_profile.life_dashboard["health"] == 7
+    assert updated_profile.satisfaction_health == 7
+    assert updated_profile.satisfaction_work == 8
 
 
 @pytest.mark.asyncio

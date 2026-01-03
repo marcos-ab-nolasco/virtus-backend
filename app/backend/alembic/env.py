@@ -16,9 +16,10 @@ if env_path.exists():
     load_dotenv(dotenv_path=env_path)
 
 # Import Base and all models
-from src.db.session import Base
-from src.db.models import User, Conversation, Message  # noqa: F401
-from src.core.config import get_settings
+from src.core.config import get_settings  # noqa: E402
+from src.db.models import Conversation, Message, User  # noqa: E402, F401
+from src.db.session import Base  # noqa: E402
+
 settings = get_settings()
 
 # this is the Alembic Config object, which provides

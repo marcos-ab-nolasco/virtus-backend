@@ -70,7 +70,7 @@ async def test_profile_has_default_onboarding_status(db_session: AsyncSession):
 
     assert profile.onboarding_status == OnboardingStatus.NOT_STARTED
     assert profile.vision_5_years is None
-    assert profile.current_challenge is None
+    assert profile.main_obstacle is None
     assert profile.annual_objectives is None
 
 
