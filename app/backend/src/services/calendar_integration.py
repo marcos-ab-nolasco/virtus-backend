@@ -1,6 +1,7 @@
 """Service layer for CalendarIntegration operations."""
 
 import uuid
+from datetime import datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -8,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.encryption import decrypt_token, encrypt_token
-from src.db.models.calendar_integration import CalendarIntegration
+from src.db.models.calendar_integration import CalendarIntegration, IntegrationStatus
 from src.schemas.calendar_integration import (
     CalendarIntegrationCreate,
     CalendarIntegrationUpdate,
@@ -196,7 +197,7 @@ async def update_integration_tokens(
     db: AsyncSession,
     integration_id: uuid.UUID,
     new_access_token: str,
-    new_token_expires_at,
+    new_token_expires_at: datetime,
 ) -> None:
     """Update access token after refresh (internal use only).
 
@@ -214,5 +215,5 @@ async def update_integration_tokens(
     if integration:
         integration.access_token = encrypt_token(new_access_token)
         integration.token_expires_at = new_token_expires_at
-        integration.status = "ACTIVE"  # Reset status on successful refresh
+        integration.status = IntegrationStatus.ACTIVE  # Reset status on successful refresh
         await db.commit()

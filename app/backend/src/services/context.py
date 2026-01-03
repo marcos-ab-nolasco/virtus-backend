@@ -9,7 +9,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models.calendar_integration import CalendarIntegration
+from src.db.models.calendar_integration import CalendarIntegration, IntegrationStatus
 from src.db.models.user import User
 from src.db.models.user_preferences import UserPreferences
 from src.db.models.user_profile import UserProfile
@@ -163,7 +163,7 @@ def _build_integration_context(integrations: list[CalendarIntegration]) -> dict:
     if not integrations:
         return {"connected": False}
 
-    active_integrations = [i for i in integrations if i.status == "ACTIVE"]
+    active_integrations = [i for i in integrations if i.status == IntegrationStatus.ACTIVE]
 
     return {
         "connected": len(active_integrations) > 0,

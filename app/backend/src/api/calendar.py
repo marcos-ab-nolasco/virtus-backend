@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.dependencies import get_current_user
+from src.db.models.calendar_integration import CalendarIntegration
 from src.db.models.user import User
 from src.db.session import get_db
 from src.schemas.calendar_event import CalendarEventListResponse, CalendarEventResponse
@@ -26,7 +27,7 @@ async def connect_calendar(
     integration_data: CalendarIntegrationCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> CalendarIntegration:
     """Connect a calendar provider (Google Calendar, Outlook, Apple Calendar).
 
     This endpoint is called after successful OAuth flow to store the integration.
@@ -42,7 +43,7 @@ async def connect_calendar(
 async def list_integrations(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> list[CalendarIntegration]:
     """List all calendar integrations for the authenticated user.
 
     Returns integration status, provider info, and sync settings.
@@ -57,7 +58,7 @@ async def get_integration(
     integration_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> CalendarIntegration:
     """Get details of a specific calendar integration."""
     integration = await integration_service.get_integration_by_id(
         db, current_user.id, integration_id
@@ -71,7 +72,7 @@ async def update_integration(
     update_data: CalendarIntegrationUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> CalendarIntegration:
     """Update calendar integration settings.
 
     Allows updating:
@@ -89,7 +90,7 @@ async def disconnect_calendar(
     integration_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     """Disconnect a calendar integration.
 
     This will:
@@ -106,7 +107,7 @@ async def list_events(
     end_date: datetime = Query(..., description="End of date range (ISO 8601)"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> CalendarEventListResponse:
     """List calendar events within a date range.
 
     Returns all synced events from connected calendar providers.
