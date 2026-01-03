@@ -190,6 +190,34 @@ async def test_user(db_session: AsyncSession) -> User:
 
 
 @pytest.fixture
+async def test_calendar_integration(db_session: AsyncSession, test_user: User):
+    """Create test calendar integration."""
+    from datetime import datetime, timedelta
+
+    from src.core.encryption import encrypt_token
+    from src.db.models.calendar_integration import (
+        CalendarIntegration,
+        CalendarProvider,
+        IntegrationStatus,
+    )
+
+    integration = CalendarIntegration(
+        user_id=test_user.id,
+        provider=CalendarProvider.GOOGLE_CALENDAR,
+        status=IntegrationStatus.ACTIVE,
+        access_token=encrypt_token("test_access_token"),
+        refresh_token=encrypt_token("test_refresh_token"),
+        token_expires_at=datetime.now() + timedelta(hours=1),
+        scopes=["calendar.readonly", "calendar.events"],
+        sync_enabled=True,
+    )
+    db_session.add(integration)
+    await db_session.commit()
+    await db_session.refresh(integration)
+    return integration
+
+
+@pytest.fixture
 def auth_headers(test_user: User) -> dict[str, str]:
     """Create authentication headers for test user."""
     from src.core.security import create_access_token
