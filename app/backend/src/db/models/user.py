@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from src.db.models.calendar_event import CalendarEvent
     from src.db.models.calendar_integration import CalendarIntegration
     from src.db.models.conversation import Conversation
+    from src.db.models.subscription import Subscription
     from src.db.models.user_preferences import UserPreferences
     from src.db.models.user_profile import UserProfile
 
@@ -44,6 +45,9 @@ class User(Base):
     preferences: Mapped["UserPreferences"] = relationship(
         "UserPreferences", back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
+    subscription: Mapped["Subscription"] = relationship(
+        "Subscription", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
     calendar_integrations: Mapped[list["CalendarIntegration"]] = relationship(
         "CalendarIntegration",
         back_populates="user",
@@ -64,11 +68,12 @@ class User(Base):
 def create_user_profile_and_preferences(
     mapper: Mapper[Any], connection: Connection, target: User
 ) -> None:
-    """Automatically create UserProfile and UserPreferences after User insert.
+    """Automatically create UserProfile, UserPreferences, and Subscription after User insert.
 
-    This ensures every user has a profile and preferences record from the start.
+    This ensures every user has a profile, preferences, and FREE subscription from the start.
     Uses raw SQL via connection to avoid session conflicts during the insert event.
     """
+    from src.db.models.subscription import Subscription, SubscriptionStatus, SubscriptionTier
     from src.db.models.user_preferences import UserPreferences
     from src.db.models.user_profile import OnboardingStatus, UserProfile
 
@@ -84,5 +89,14 @@ def create_user_profile_and_preferences(
     connection.execute(
         UserPreferences.__table__.insert().values(  # type: ignore[attr-defined]
             user_id=target.id,
+        )
+    )
+
+    # Insert FREE Subscription with ACTIVE status
+    connection.execute(
+        Subscription.__table__.insert().values(  # type: ignore[attr-defined]
+            user_id=target.id,
+            tier=SubscriptionTier.FREE,
+            status=SubscriptionStatus.ACTIVE,
         )
     )

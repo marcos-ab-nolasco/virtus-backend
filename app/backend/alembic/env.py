@@ -17,7 +17,16 @@ if env_path.exists():
 
 # Import Base and all models
 from src.core.config import get_settings  # noqa: E402
-from src.db.models import Conversation, Message, User  # noqa: E402, F401
+from src.db.models import (  # noqa: E402, F401
+    CalendarEvent,
+    CalendarIntegration,
+    Conversation,
+    Message,
+    Subscription,
+    User,
+    UserPreferences,
+    UserProfile,
+)
 from src.db.session import Base  # noqa: E402
 
 settings = get_settings()
