@@ -11,6 +11,10 @@ from src.schemas.chat import (
     MessageList,
     MessageRead,
 )
+from src.schemas.subscription import (
+    SubscriptionResponse,
+    SubscriptionUpdate,
+)
 from src.schemas.user import UserCreate, UserRead
 from src.schemas.user_preferences import (
     UserPreferencesResponse,
@@ -49,4 +53,6 @@ __all__ = [
     "MoralProfileSchema",
     "UserPreferencesUpdate",
     "UserPreferencesResponse",
+    "SubscriptionUpdate",
+    "SubscriptionResponse",
 ]
