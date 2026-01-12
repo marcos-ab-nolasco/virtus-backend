@@ -3,6 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.security import hash_password
+from src.db.models.subscription import Subscription, SubscriptionStatus, SubscriptionTier
 from src.db.models.user import User
 from src.db.models.user_preferences import CommunicationStyle, UserPreferences, WeekDay
 from src.db.models.user_profile import OnboardingStatus, UserProfile
@@ -228,3 +229,86 @@ async def test_auto_creation_does_not_duplicate(db_session: AsyncSession):
 
     assert len(profiles_after) == 1
     assert len(prefs_after) == 1
+
+
+@pytest.mark.asyncio
+async def test_user_registration_creates_subscription(db_session: AsyncSession):
+    """Test that creating a User automatically creates a Subscription."""
+    # Create user
+    user = User(
+        email="subscriptiontest@example.com",
+        hashed_password=hash_password("password123"),
+        full_name="Subscription Test",
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    # Check that subscription was created automatically
+    result = await db_session.execute(select(Subscription).where(Subscription.user_id == user.id))
+    subscription = result.scalar_one_or_none()
+
+    assert subscription is not None
+    assert subscription.user_id == user.id
+    assert subscription.tier == SubscriptionTier.FREE
+    assert subscription.status == SubscriptionStatus.ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_user_registration_creates_profile_preferences_and_subscription(db_session: AsyncSession):
+    """Test that creating a User automatically creates Profile, Preferences, AND Subscription."""
+    # Create user
+    user = User(
+        email="completetest@example.com",
+        hashed_password=hash_password("password123"),
+        full_name="Complete Test",
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    # Check that all three were created automatically
+    result_profile = await db_session.execute(
+        select(UserProfile).where(UserProfile.user_id == user.id)
+    )
+    profile = result_profile.scalar_one_or_none()
+
+    result_prefs = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.user_id == user.id)
+    )
+    preferences = result_prefs.scalar_one_or_none()
+
+    result_sub = await db_session.execute(
+        select(Subscription).where(Subscription.user_id == user.id)
+    )
+    subscription = result_sub.scalar_one_or_none()
+
+    assert profile is not None
+    assert preferences is not None
+    assert subscription is not None
+    assert profile.user_id == user.id
+    assert preferences.user_id == user.id
+    assert subscription.user_id == user.id
+
+
+@pytest.mark.asyncio
+async def test_transaction_rollback_prevents_orphaned_subscription(db_session: AsyncSession):
+    """Test that rolling back user creation doesn't leave orphaned subscription."""
+    user = User(
+        email="subrollback@example.com",
+        hashed_password=hash_password("password123"),
+        full_name="Sub Rollback Test",
+    )
+    db_session.add(user)
+    await db_session.flush()  # Trigger auto-creation
+
+    user_id = user.id
+
+    # Rollback the transaction
+    await db_session.rollback()
+
+    # Verify no orphaned subscription exists
+    result_sub = await db_session.execute(select(Subscription).where(Subscription.user_id == user_id))
+    subscription = result_sub.scalar_one_or_none()
+
+    assert subscription is None
