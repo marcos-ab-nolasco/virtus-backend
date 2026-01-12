@@ -9,7 +9,6 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models.calendar_event import CalendarEvent
 from src.db.session import get_async_sessionmaker
@@ -110,7 +109,9 @@ class GetCalendarEventsSkill(BaseSkill):
                             "id": str(event.id),
                             "title": event.title,
                             "description": event.description,
-                            "start_time": event.start_time.isoformat() if event.start_time else None,
+                            "start_time": (
+                                event.start_time.isoformat() if event.start_time else None
+                            ),
                             "end_time": event.end_time.isoformat() if event.end_time else None,
                             "location": event.location,
                             "external_id": event.external_id,

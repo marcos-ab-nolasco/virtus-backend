@@ -8,7 +8,6 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models.user_preferences import UserPreferences
 from src.db.session import get_async_sessionmaker
@@ -83,10 +82,22 @@ class GetUserPreferencesSkill(BaseSkill):
                     "user_id": str(prefs.user_id),
                     "timezone": prefs.timezone,
                     "language": prefs.language,
-                    "communication_style": prefs.communication_style.value if prefs.communication_style else None,
-                    "morning_checkin_time": prefs.morning_checkin_time.strftime("%H:%M") if prefs.morning_checkin_time else None,
-                    "evening_checkin_time": prefs.evening_checkin_time.strftime("%H:%M") if prefs.evening_checkin_time else None,
-                    "weekly_review_day": prefs.weekly_review_day.value if prefs.weekly_review_day else None,
+                    "communication_style": (
+                        prefs.communication_style.value if prefs.communication_style else None
+                    ),
+                    "morning_checkin_time": (
+                        prefs.morning_checkin_time.strftime("%H:%M")
+                        if prefs.morning_checkin_time
+                        else None
+                    ),
+                    "evening_checkin_time": (
+                        prefs.evening_checkin_time.strftime("%H:%M")
+                        if prefs.evening_checkin_time
+                        else None
+                    ),
+                    "weekly_review_day": (
+                        prefs.weekly_review_day.value if prefs.weekly_review_day else None
+                    ),
                     "week_start_day": prefs.week_start_day.value if prefs.week_start_day else None,
                     "coach_name": prefs.coach_name,
                 }
