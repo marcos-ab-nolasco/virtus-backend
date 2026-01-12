@@ -10,7 +10,9 @@ from src.db.models.user import User
 
 
 @pytest.mark.asyncio
-async def test_get_my_subscription_success(client: AsyncClient, test_user: User, auth_headers: dict):
+async def test_get_my_subscription_success(
+    client: AsyncClient, test_user: User, auth_headers: dict
+):
     """Test GET /api/v1/me/subscription returns user subscription."""
     response = await client.get("/api/v1/me/subscription", headers=auth_headers)
 

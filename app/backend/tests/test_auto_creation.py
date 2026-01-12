@@ -255,7 +255,9 @@ async def test_user_registration_creates_subscription(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_user_registration_creates_profile_preferences_and_subscription(db_session: AsyncSession):
+async def test_user_registration_creates_profile_preferences_and_subscription(
+    db_session: AsyncSession,
+):
     """Test that creating a User automatically creates Profile, Preferences, AND Subscription."""
     # Create user
     user = User(
@@ -308,7 +310,9 @@ async def test_transaction_rollback_prevents_orphaned_subscription(db_session: A
     await db_session.rollback()
 
     # Verify no orphaned subscription exists
-    result_sub = await db_session.execute(select(Subscription).where(Subscription.user_id == user_id))
+    result_sub = await db_session.execute(
+        select(Subscription).where(Subscription.user_id == user_id)
+    )
     subscription = result_sub.scalar_one_or_none()
 
     assert subscription is None
