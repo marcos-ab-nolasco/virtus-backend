@@ -1,3 +1,3 @@
-from src.services import chat
+from src.services import chat, preferences, profile
 
-__all__ = ["chat"]
+__all__ = ["chat", "profile", "preferences"]

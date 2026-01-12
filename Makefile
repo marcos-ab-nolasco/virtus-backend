@@ -1,6 +1,6 @@
     .PHONY: help setup-docker docker-build docker-up docker-down docker-logs docker-restart \
-	docker-migrate docker-migrate-create migrate migrate-create migrate-downgrade \
-	lint-backend lint-backend-fix lint lint-fix test-up test-down test-backend test test-cov clean
+	docker-migrate docker-migrate-create migrate migrate-create migrate-downgrade migrate-reset \
+	lint-backend lint-backend-fix lint lint-fix test-up test-stop test-down test-migrate test-migrate-reset test-reset test-backend test test-cov test-specific clean
 
     help: ## Show this help message
 	@echo "Available commands:"
@@ -45,6 +45,17 @@
     migrate-downgrade: ## Rollback last migration
 	cd app/backend && alembic downgrade -1
 
+    migrate-reset: ## Reset database (drop all tables and reapply migrations) - DEV ONLY
+	@echo "⚠️  WARNING: This will drop all tables and data!"
+	@read -p "Are you sure? (yes/no): " confirm; \
+	if [ "$$confirm" = "yes" ]; then \
+		echo "Resetting database..."; \
+		cd app/backend && alembic downgrade base && alembic upgrade head; \
+		echo "✅ Database reset complete!"; \
+	else \
+		echo "Cancelled."; \
+	fi
+
     lint-backend:
 	cd app/backend && black --check src tests --line-length 100
 	cd app/backend && ruff check src tests
@@ -71,8 +82,29 @@
 	@timeout 30 bash -c 'until docker compose -f infrastructure/docker-compose.yml ps postgres_test 2>/dev/null | grep -q "healthy"; do sleep 1; done' || (echo "Timeout waiting for test database" && exit 1)
 	@echo "Test database is ready!"
 
-    test-down: ## Stop test database
+    test-stop: ## Stop test database
 	docker compose -f infrastructure/docker-compose.yml stop postgres_test
+
+    test-down: ## Remove test database
+	docker compose -f infrastructure/docker-compose.yml down postgres_test
+
+    test-migrate: ## Apply migrations to test database
+	@echo "Applying migrations to test database..."
+	cd app/backend && DATABASE_URL="postgresql+asyncpg://test:test@localhost:5433/virtus_db_test" .venv/bin/alembic upgrade head
+	@echo "Test database migrations applied!"
+
+    test-migrate-reset: ## Reset test database migrations (downgrade to base then upgrade)
+	@echo "Resetting test database migrations..."
+	cd app/backend && DATABASE_URL="postgresql+asyncpg://test:test@localhost:5433/virtus_db_test" .venv/bin/alembic downgrade base
+	cd app/backend && DATABASE_URL="postgresql+asyncpg://test:test@localhost:5433/virtus_db_test" .venv/bin/alembic upgrade head
+	@echo "Test database migrations reset complete!"
+
+    test-reset: ## Completely reset test database (down + up + migrate)
+	@echo "Resetting test database completely..."
+	make test-down
+	make test-up
+	make test-migrate
+	@echo "Test database reset complete!"
 
     test-backend: ## Run backend tests (requires test database running)
 	cd app/backend && pytest -v
@@ -83,6 +115,13 @@
     test-cov: ## Run backend tests with coverage
 	@echo "Running backend tests with coverage..."
 	cd app/backend && pytest --cov=src --cov-report=html --cov-report=term
+
+    test-specific: ## Run specific tests (use TESTS="test_file.py::test_name" or TESTS="test_file.py")
+	@if [ -z "$(TESTS)" ]; then \
+		echo "Error: TESTS variable is required. Usage: make test-specific TESTS=\"test_file.py\""; \
+		exit 1; \
+	fi
+	cd app/backend && pytest -v $(TESTS)
 
     clean: ## Clean backend cache and artifacts
 	@echo "Cleaning backend..."

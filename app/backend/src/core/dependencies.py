@@ -1,5 +1,5 @@
 import logging
-from typing import Annotated
+from typing import Annotated, Callable
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.cache.decorator import redis_cache_decorator
 from src.core.security import decode_token
+from src.db.models.subscription import SubscriptionTier
 from src.db.models.user import User
 from src.db.session import get_db
 
@@ -86,3 +87,39 @@ async def get_current_user(
     request.state.user_id = str(user_id)
 
     return user
+
+
+def require_tier(required_tier: SubscriptionTier) -> Callable:
+    """Create a dependency that checks if user has required subscription tier.
+
+    Args:
+        required_tier: Minimum subscription tier required (FREE, TRIAL, or PAID)
+
+    Returns:
+        FastAPI dependency function that enforces tier-based access control
+
+    Example:
+        @router.get("/premium-feature", dependencies=[Depends(require_tier(SubscriptionTier.PAID))])
+        async def premium_endpoint():
+            # This endpoint requires PAID tier
+            return {"premium": "content"}
+    """
+
+    async def tier_checker(
+        current_user: Annotated[User, Depends(get_current_user)],
+        db: Annotated[AsyncSession, Depends(get_db)],
+    ) -> User:
+        """Verify that current user's subscription meets the required tier."""
+        from src.services.subscription import check_subscription_access
+
+        has_access = await check_subscription_access(db, current_user.id, required_tier)
+
+        if not has_access:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"This feature requires {required_tier.value} subscription tier or higher",
+            )
+
+        return current_user
+
+    return tier_checker
