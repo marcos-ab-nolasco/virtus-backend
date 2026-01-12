@@ -78,7 +78,9 @@ async def test_subscription_cascade_delete(db_session: AsyncSession, test_user: 
     await db_session.commit()
 
     # Verify subscription was also deleted
-    result = await db_session.execute(select(Subscription).where(Subscription.id == subscription_id))
+    result = await db_session.execute(
+        select(Subscription).where(Subscription.id == subscription_id)
+    )
     deleted_subscription = result.scalar_one_or_none()
     assert deleted_subscription is None
 
