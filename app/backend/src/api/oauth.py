@@ -146,6 +146,9 @@ async def google_oauth_callback(
             status=integration.status.value,
         )
 
+    except HTTPException:
+        # Re-raise HTTPException without catching (FastAPI handles it)
+        raise
     except OAuthError as e:
         logger.error(f"OAuth error: {e}")
         raise HTTPException(

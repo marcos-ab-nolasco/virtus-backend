@@ -203,9 +203,9 @@ class TestOAuthEndpoints:
     """Test OAuth API endpoints"""
 
     @pytest.mark.asyncio
-    async def test_initiate_oauth_returns_redirect_url(self, async_client):
+    async def test_initiate_oauth_returns_redirect_url(self, client):
         """GET /auth/google should return authorization URL"""
-        response = await async_client.get("/api/v1/auth/google")
+        response = await client.get("/api/v1/auth/google")
 
         assert response.status_code == 200
         data = response.json()
@@ -214,7 +214,7 @@ class TestOAuthEndpoints:
         assert "accounts.google.com" in data["authorization_url"]
 
     @pytest.mark.asyncio
-    async def test_oauth_callback_success(self, async_client, test_user):
+    async def test_oauth_callback_success(self, client, test_user, auth_headers):
         """GET /auth/google/callback should exchange code for tokens"""
         # Mock the OAuth service
         with patch(
@@ -224,6 +224,7 @@ class TestOAuthEndpoints:
                 "access_token": "ya29.test-token",
                 "refresh_token": "1//test-refresh",
                 "expires_in": 3600,
+                "scope": "https://www.googleapis.com/auth/calendar.readonly",
             }
 
             with patch(
@@ -234,35 +235,41 @@ class TestOAuthEndpoints:
                     "id": "google-123",
                 }
 
-                response = await async_client.get(
-                    "/api/v1/auth/google/callback?code=test-code&state=test-state",
-                    headers={"Authorization": f"Bearer {test_user.access_token}"},
-                )
+                # Store state for validation
+                with patch("src.api.oauth.oauth_states", {"test-state": {"created_at": "test", "provider": "google"}}):
+                    response = await client.get(
+                        "/api/v1/auth/google/callback?code=test-code&state=test-state",
+                        headers=auth_headers,
+                    )
 
-                assert response.status_code == 200
-                data = response.json()
-                assert "message" in data
-                assert "integration_id" in data
+                    assert response.status_code == 200
+                    data = response.json()
+                    assert "message" in data
+                    assert "integration_id" in data
 
     @pytest.mark.asyncio
-    async def test_oauth_callback_missing_code_returns_error(self, async_client):
+    async def test_oauth_callback_missing_code_returns_error(self, client, auth_headers):
         """Callback without code should return error"""
-        response = await async_client.get("/api/v1/auth/google/callback")
+        response = await client.get("/api/v1/auth/google/callback", headers=auth_headers)
 
-        assert response.status_code == 400
-        assert "code" in response.json()["detail"].lower()
+        assert response.status_code == 422  # FastAPI validation error
+        data = response.json()
+        assert "detail" in data
 
     @pytest.mark.asyncio
-    async def test_oauth_callback_invalid_state_returns_error(self, async_client):
+    async def test_oauth_callback_invalid_state_returns_error(self, client, auth_headers):
         """Callback with invalid state should return error"""
-        with patch("src.services.oauth_google.GoogleOAuthService.validate_state") as mock_validate:
-            mock_validate.side_effect = OAuthError("State mismatch")
-
-            response = await async_client.get(
-                "/api/v1/auth/google/callback?code=test&state=invalid"
+        # State not in oauth_states dict (invalid/expired)
+        with patch("src.api.oauth.oauth_states", {}):
+            response = await client.get(
+                "/api/v1/auth/google/callback?code=test&state=invalid",
+                headers=auth_headers,
             )
 
             assert response.status_code == 400
+            data = response.json()
+            assert "detail" in data
+            assert "state" in data["detail"].lower()
 
 
 class TestOAuthStateManagement:
@@ -302,7 +309,7 @@ class TestOAuthTokenEncryption:
     """Test token encryption for storage"""
 
     @pytest.mark.asyncio
-    async def test_tokens_are_encrypted_before_storage(self, async_client, test_user):
+    async def test_tokens_are_encrypted_before_storage(self, client, test_user, auth_headers):
         """Tokens should be encrypted before storing in database"""
         with patch(
             "src.services.oauth_google.GoogleOAuthService.exchange_code_for_tokens"
@@ -311,15 +318,30 @@ class TestOAuthTokenEncryption:
                 "access_token": "plaintext-access-token",
                 "refresh_token": "plaintext-refresh-token",
                 "expires_in": 3600,
+                "scope": "https://www.googleapis.com/auth/calendar.readonly",
             }
 
-            with patch("src.services.calendar_integration.encrypt_token") as mock_encrypt:
-                mock_encrypt.side_effect = lambda x: f"encrypted_{x}"
+            with patch(
+                "src.services.oauth_google.GoogleOAuthService.get_user_info"
+            ) as mock_user_info:
+                mock_user_info.return_value = {
+                    "email": test_user.email,
+                    "id": "google-123",
+                }
 
-                # Create integration via callback
-                # Verify encryption was called
-                # This is tested in integration tests
-                pass
+                with patch("src.api.oauth.encrypt_token") as mock_encrypt:
+                    mock_encrypt.side_effect = lambda x: f"encrypted_{x}"
+
+                    # Store state for validation
+                    with patch("src.api.oauth.oauth_states", {"test-state": {"created_at": "test", "provider": "google"}}):
+                        response = await client.get(
+                            "/api/v1/auth/google/callback?code=test-code&state=test-state",
+                            headers=auth_headers,
+                        )
+
+                        assert response.status_code == 200
+                        # Verify encrypt_token was called twice (access + refresh)
+                        assert mock_encrypt.call_count == 2
 
 
 class TestOAuthErrorHandling:
