@@ -96,8 +96,15 @@ class UserProfileBase(BaseModel):
     )
 
     # Onboarding
+    onboarding_started_at: datetime | None = Field(None, description="When onboarding was started")
     onboarding_completed_at: datetime | None = Field(
         None, description="When onboarding was completed"
+    )
+    onboarding_current_step: str | None = Field(
+        None, max_length=50, description="Current onboarding step"
+    )
+    onboarding_data: dict | None = Field(
+        None, description="Partial onboarding data collected during the flow"
     )
 
 
