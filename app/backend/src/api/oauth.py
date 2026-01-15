@@ -20,7 +20,7 @@ from src.db.models.calendar_integration import (
 )
 from src.db.models.user import User
 from src.db.session import get_db
-from src.schemas.oauth import CalendarIntegrationResponse, OAuthInitiateResponse
+from src.schemas.oauth import CalendarIntegrationCreateResponse, OAuthInitiateResponse
 from src.services.oauth_google import GoogleOAuthService, OAuthError
 
 logger = logging.getLogger(__name__)
@@ -79,14 +79,14 @@ async def initiate_google_oauth(
         ) from e
 
 
-@router.get("/google/callback", response_model=CalendarIntegrationResponse)
+@router.get("/google/callback", response_model=CalendarIntegrationCreateResponse)
 async def google_oauth_callback(
     code: str = Query(..., description="Authorization code from Google"),
     state: str = Query(..., description="State parameter for validation"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     oauth_service: GoogleOAuthService = Depends(get_google_oauth_service),
-) -> CalendarIntegrationResponse:
+) -> CalendarIntegrationCreateResponse:
     """
     Handle Google OAuth callback
 
@@ -139,7 +139,7 @@ async def google_oauth_callback(
 
         logger.info(f"Created calendar integration {integration.id} for user {current_user.id}")
 
-        return CalendarIntegrationResponse(
+        return CalendarIntegrationCreateResponse(
             message="Successfully connected Google Calendar",
             integration_id=str(integration.id),
             provider=integration.provider.value,

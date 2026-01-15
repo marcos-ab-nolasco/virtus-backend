@@ -29,7 +29,7 @@ class OAuthCallbackRequest(BaseModel):
     state: str = Field(..., description="State parameter for validation")
 
 
-class CalendarIntegrationResponse(BaseModel):
+class CalendarIntegrationCreateResponse(BaseModel):
     """Response after creating calendar integration"""
 
     message: str = Field(..., description="Success message")
