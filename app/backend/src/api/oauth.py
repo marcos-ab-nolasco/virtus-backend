@@ -5,7 +5,7 @@ Handles OAuth2 flow for external service integrations.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,7 +61,7 @@ async def initiate_google_oauth(
         # In production, use Redis with TTL for automatic expiration
         oauth_states.clear()  # Simplified: clear all old states
         oauth_states[state] = {
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(UTC),
             "provider": "google",
         }
 
@@ -117,7 +117,7 @@ async def google_oauth_callback(
         encrypted_refresh_token = encrypt_token(tokens.get("refresh_token", ""))
 
         # Calculate token expiry
-        expires_at = datetime.utcnow() + timedelta(seconds=tokens["expires_in"])
+        expires_at = datetime.now(UTC) + timedelta(seconds=tokens["expires_in"])
 
         # Parse scopes from string to list
         scopes_list = tokens.get("scope", "").split() if tokens.get("scope") else []
