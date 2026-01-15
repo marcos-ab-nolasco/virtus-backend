@@ -104,9 +104,24 @@ class UserProfile(Base):
         default=OnboardingStatus.NOT_STARTED,
         nullable=False,
     )
+    onboarding_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="When onboarding was started",
+    )
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+    onboarding_current_step: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="Current onboarding step (welcome, name, goals, preferences, conclusion)",
+    )
+    onboarding_data: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="Partial onboarding data (name, goals, preferences, conversation_history)",
     )
 
     # Timestamps
