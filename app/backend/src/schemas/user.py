@@ -21,6 +21,8 @@ class UserRead(UserBase):
     """Schema for reading user data."""
 
     id: UUID
+    is_admin: bool
+    is_blocked: bool
     created_at: datetime
     updated_at: datetime
 
