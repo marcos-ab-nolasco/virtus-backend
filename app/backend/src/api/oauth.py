@@ -6,6 +6,7 @@ Handles OAuth2 flow for external service integrations.
 
 import logging
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,6 +48,7 @@ def get_google_oauth_service() -> GoogleOAuthService:
 @router.get("/google", response_model=OAuthInitiateResponse)
 async def initiate_google_oauth(
     oauth_service: GoogleOAuthService = Depends(get_google_oauth_service),
+    current_user: User = Depends(get_current_user),
 ) -> OAuthInitiateResponse:
     """
     Initiate Google OAuth flow
@@ -63,6 +65,7 @@ async def initiate_google_oauth(
         oauth_states[state] = {
             "created_at": datetime.now(UTC),
             "provider": "google",
+            "user_id": str(current_user.id),
         }
 
         logger.info(f"Initiated OAuth flow with state: {state[:8]}...")
@@ -83,7 +86,6 @@ async def initiate_google_oauth(
 async def google_oauth_callback(
     code: str = Query(..., description="Authorization code from Google"),
     state: str = Query(..., description="State parameter for validation"),
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     oauth_service: GoogleOAuthService = Depends(get_google_oauth_service),
 ) -> CalendarIntegrationCreateResponse:
@@ -102,10 +104,26 @@ async def google_oauth_callback(
             )
 
         # Remove used state
-        oauth_states.pop(state, None)
+        state_data = oauth_states.pop(state, None) or {}
+        user_id_raw = state_data.get("user_id")
+        if not user_id_raw:
+            logger.error("OAuth state missing user_id")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid OAuth state",
+            )
+
+        try:
+            user_id = UUID(user_id_raw)
+        except (ValueError, TypeError) as e:
+            logger.error("OAuth state user_id invalid: %s", user_id_raw)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid OAuth state",
+            ) from e
 
         # Exchange code for tokens
-        logger.info(f"Exchanging code for tokens for user: {current_user.id}")
+        logger.info(f"Exchanging code for tokens for user: {user_id}")
         tokens = await oauth_service.exchange_code_for_tokens(code, state)
 
         # Get user info from Google
@@ -124,7 +142,7 @@ async def google_oauth_callback(
 
         # Create or update calendar integration
         integration = CalendarIntegration(
-            user_id=current_user.id,
+            user_id=user_id,
             provider=CalendarProvider.GOOGLE_CALENDAR,
             access_token=encrypted_access_token,
             refresh_token=encrypted_refresh_token,
@@ -137,7 +155,7 @@ async def google_oauth_callback(
         await db.commit()
         await db.refresh(integration)
 
-        logger.info(f"Created calendar integration {integration.id} for user {current_user.id}")
+        # logger.info(f"Created calendar integration {integration.id} for user {current_user.id}")
 
         return CalendarIntegrationCreateResponse(
             message="Successfully connected Google Calendar",
