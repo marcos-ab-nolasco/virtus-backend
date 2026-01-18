@@ -94,7 +94,12 @@ async def initiate_google_oauth(
         ) from e
 
 
-@router.get("/google/callback", response_class=RedirectResponse, response_model=None)
+@router.get(
+    "/google/callback",
+    response_class=RedirectResponse,
+    response_model=None,
+    status_code=status.HTTP_303_SEE_OTHER,
+)
 async def google_oauth_callback(
     code: str | None = Query(None, description="Authorization code from Google"),
     state: str = Query(..., description="State parameter for validation"),
