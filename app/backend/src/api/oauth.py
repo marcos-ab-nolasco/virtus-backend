@@ -23,7 +23,7 @@ from src.db.models.calendar_integration import (
 )
 from src.db.models.user import User
 from src.db.session import get_db
-from src.schemas.oauth import CalendarIntegrationCreateResponse, OAuthInitiateResponse
+from src.schemas.oauth import OAuthInitiateResponse
 from src.services.oauth_google import GoogleOAuthService, OAuthError
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,7 @@ async def initiate_google_oauth(
         ) from e
 
 
-@router.get("/google/callback")
+@router.get("/google/callback", response_class=RedirectResponse, response_model=None)
 async def google_oauth_callback(
     code: str | None = Query(None, description="Authorization code from Google"),
     state: str = Query(..., description="State parameter for validation"),
@@ -102,7 +102,7 @@ async def google_oauth_callback(
     error_description: str | None = Query(None, description="OAuth error description"),
     db: AsyncSession = Depends(get_db),
     oauth_service: GoogleOAuthService = Depends(get_google_oauth_service),
-) -> CalendarIntegrationCreateResponse:
+) -> RedirectResponse:
     """
     Handle Google OAuth callback
 
@@ -190,76 +190,56 @@ async def google_oauth_callback(
         # logger.info(f"Created calendar integration {integration.id} for user {current_user.id}")
 
         settings = get_settings()
-        if settings.FRONTEND_OAUTH_REDIRECT_URL:
-            redirect_url = _build_redirect_url(
-                settings.FRONTEND_OAUTH_REDIRECT_URL,
-                {
-                    "status": "connected",
-                    "provider": integration.provider.value.lower(),
-                    "integration_id": str(integration.id),
-                },
-            )
-            return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
-
-        return CalendarIntegrationCreateResponse(
-            message="Successfully connected Google Calendar",
-            integration_id=str(integration.id),
-            provider=integration.provider.value,
-            status=integration.status.value,
+        redirect_url = _build_redirect_url(
+            settings.FRONTEND_OAUTH_REDIRECT_URL,
+            {
+                "status": "connected",
+                "provider": integration.provider.value.lower(),
+                "integration_id": str(integration.id),
+            },
         )
+        return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
 
     except HTTPException as e:
         settings = get_settings()
-        if settings.FRONTEND_OAUTH_REDIRECT_URL:
-            reason = "oauth_failed"
-            if e.status_code == status.HTTP_400_BAD_REQUEST:
-                if e.detail in {"Invalid or expired OAuth state", "Invalid OAuth state"}:
-                    reason = "invalid_state"
-                elif e.detail == "access_denied":
-                    reason = "access_denied"
-                elif e.detail == "Failed to complete OAuth flow":
-                    reason = "internal_error"
-            redirect_url = _build_redirect_url(
-                settings.FRONTEND_OAUTH_REDIRECT_URL,
-                {
-                    "status": "failed",
-                    "provider": "google",
-                    "reason": reason,
-                },
-            )
-            return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
-        raise
+        reason = "oauth_failed"
+        if e.status_code == status.HTTP_400_BAD_REQUEST:
+            if e.detail in {"Invalid or expired OAuth state", "Invalid OAuth state"}:
+                reason = "invalid_state"
+            elif e.detail == "access_denied":
+                reason = "access_denied"
+            elif e.detail == "Failed to complete OAuth flow":
+                reason = "internal_error"
+        redirect_url = _build_redirect_url(
+            settings.FRONTEND_OAUTH_REDIRECT_URL,
+            {
+                "status": "failed",
+                "provider": "google",
+                "reason": reason,
+            },
+        )
+        return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
     except OAuthError as e:
         logger.error(f"OAuth error: {e}")
         settings = get_settings()
-        if settings.FRONTEND_OAUTH_REDIRECT_URL:
-            redirect_url = _build_redirect_url(
-                settings.FRONTEND_OAUTH_REDIRECT_URL,
-                {
-                    "status": "failed",
-                    "provider": "google",
-                    "reason": "oauth_error",
-                },
-            )
-            return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        redirect_url = _build_redirect_url(
+            settings.FRONTEND_OAUTH_REDIRECT_URL,
+            {
+                "status": "failed",
+                "provider": "google",
+                "reason": "oauth_error",
+            },
+        )
+        return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
     except Exception as e:
         logger.error(f"Error in OAuth callback: {e}", exc_info=True)
         settings = get_settings()
-        if settings.FRONTEND_OAUTH_REDIRECT_URL:
-            redirect_url = _build_redirect_url(
-                settings.FRONTEND_OAUTH_REDIRECT_URL,
-                {
-                    "status": "failed",
-                    "provider": "google",
-                    "reason": "internal_error",
-                },
-            )
-            return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to complete OAuth flow",
-        ) from e
+        redirect_url = _build_redirect_url(
+            settings.FRONTEND_OAUTH_REDIRECT_URL,
+            {
+                "status": "failed",
+                "provider": "google",
+                "reason": "internal_error",
+            },
+        )
+        return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)

@@ -1,7 +1,7 @@
 """Service layer for CalendarIntegration operations."""
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -196,7 +196,7 @@ async def get_decrypted_tokens(
     access_token = decrypt_token(integration.access_token)
     refresh_token = decrypt_token(integration.refresh_token)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if integration.token_expires_at <= now + timedelta(seconds=30):
         if integration.provider == CalendarProvider.GOOGLE_CALENDAR:
             settings = get_settings()
@@ -210,8 +210,7 @@ async def get_decrypted_tokens(
                 )
 
             redirect_uri = (
-                settings.GOOGLE_REDIRECT_URI
-                or "http://localhost:8000/api/v1/auth/google/callback"
+                settings.GOOGLE_REDIRECT_URI or "http://localhost:8000/api/v1/auth/google/callback"
             )
             oauth_service = GoogleOAuthService(
                 settings.GOOGLE_CLIENT_ID,
