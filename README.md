@@ -1,4 +1,4 @@
-# virtus backend
+# Virtus Backend
 
 Backend do Virtus v3 (API REST + agentes/skills) com base em Python/FastAPI.
 
@@ -25,6 +25,16 @@ Backend do Virtus v3 (API REST + agentes/skills) com base em Python/FastAPI.
 - python-jose + bcrypt
 - httpx, tenacity, slowapi
 - openai, anthropic
+
+## API e rotas principais
+- Base path: `/api/v1`
+- Auth: `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`
+- Onboarding: `POST /onboarding/start`, `POST /onboarding/message`, `GET /onboarding/status`, `PATCH /onboarding/skip`
+- Perfil e preferencias: `GET/PATCH /me/profile`, `GET/PATCH /me/preferences`
+- OAuth calendario: `GET /auth/google`, `GET /auth/google/callback`, `GET /me/calendar/integrations`
+
+## Notas importantes
+- OAuth Google e usado para integracao de calendario, nao para login social.
 
 ## Estrutura de pastas (resumo)
 
