@@ -20,41 +20,41 @@ class SubscriptionTier(str, enum.Enum):
     TRIAL = "TRIAL"
     PAID = "PAID"
 
-    def __lt__(self, other: "SubscriptionTier") -> bool:
-        """Enable tier comparison for access control."""
-        tier_order = {
-            SubscriptionTier.FREE: 0,
-            SubscriptionTier.TRIAL: 1,
-            SubscriptionTier.PAID: 2,
-        }
-        return tier_order[self] < tier_order[other]
+    def _coerce_other(self, other: str) -> "SubscriptionTier | None":
+        if isinstance(other, SubscriptionTier):
+            return other
+        try:
+            return SubscriptionTier(other)
+        except ValueError:
+            return None
 
-    def __le__(self, other: "SubscriptionTier") -> bool:
+    def __lt__(self, other: str) -> bool:
         """Enable tier comparison for access control."""
-        tier_order = {
-            SubscriptionTier.FREE: 0,
-            SubscriptionTier.TRIAL: 1,
-            SubscriptionTier.PAID: 2,
-        }
-        return tier_order[self] <= tier_order[other]
+        other_tier = self._coerce_other(other)
+        if other_tier is None:
+            return False
+        return _TIER_ORDER[self] < _TIER_ORDER[other_tier]
 
-    def __ge__(self, other: "SubscriptionTier") -> bool:
+    def __le__(self, other: str) -> bool:
         """Enable tier comparison for access control."""
-        tier_order = {
-            SubscriptionTier.FREE: 0,
-            SubscriptionTier.TRIAL: 1,
-            SubscriptionTier.PAID: 2,
-        }
-        return tier_order[self] >= tier_order[other]
+        other_tier = self._coerce_other(other)
+        if other_tier is None:
+            return False
+        return _TIER_ORDER[self] <= _TIER_ORDER[other_tier]
 
-    def __gt__(self, other: "SubscriptionTier") -> bool:
+    def __ge__(self, other: str) -> bool:
         """Enable tier comparison for access control."""
-        tier_order = {
-            SubscriptionTier.FREE: 0,
-            SubscriptionTier.TRIAL: 1,
-            SubscriptionTier.PAID: 2,
-        }
-        return tier_order[self] > tier_order[other]
+        other_tier = self._coerce_other(other)
+        if other_tier is None:
+            return False
+        return _TIER_ORDER[self] >= _TIER_ORDER[other_tier]
+
+    def __gt__(self, other: str) -> bool:
+        """Enable tier comparison for access control."""
+        other_tier = self._coerce_other(other)
+        if other_tier is None:
+            return False
+        return _TIER_ORDER[self] > _TIER_ORDER[other_tier]
 
 
 class SubscriptionStatus(str, enum.Enum):
@@ -64,6 +64,13 @@ class SubscriptionStatus(str, enum.Enum):
     CANCELLED = "CANCELLED"
     EXPIRED = "EXPIRED"
     TRIAL_ENDED = "TRIAL_ENDED"
+
+
+_TIER_ORDER = {
+    SubscriptionTier.FREE: 0,
+    SubscriptionTier.TRIAL: 1,
+    SubscriptionTier.PAID: 2,
+}
 
 
 class Subscription(Base):

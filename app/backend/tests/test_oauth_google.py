@@ -236,7 +236,10 @@ class TestOAuthEndpoints:
                 }
 
                 # Store state for validation
-                with patch("src.api.oauth.oauth_states", {"test-state": {"created_at": "test", "provider": "google"}}):
+                with patch(
+                    "src.api.oauth.oauth_states",
+                    {"test-state": {"created_at": "test", "provider": "google"}},
+                ):
                     response = await client.get(
                         "/api/v1/auth/google/callback?code=test-code&state=test-state",
                         headers=auth_headers,
@@ -333,7 +336,10 @@ class TestOAuthTokenEncryption:
                     mock_encrypt.side_effect = lambda x: f"encrypted_{x}"
 
                     # Store state for validation
-                    with patch("src.api.oauth.oauth_states", {"test-state": {"created_at": "test", "provider": "google"}}):
+                    with patch(
+                        "src.api.oauth.oauth_states",
+                        {"test-state": {"created_at": "test", "provider": "google"}},
+                    ):
                         response = await client.get(
                             "/api/v1/auth/google/callback?code=test-code&state=test-state",
                             headers=auth_headers,

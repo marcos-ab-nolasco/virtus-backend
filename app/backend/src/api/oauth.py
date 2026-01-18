@@ -5,7 +5,7 @@ Handles OAuth2 flow for external service integrations.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +20,7 @@ from src.db.models.calendar_integration import (
 )
 from src.db.models.user import User
 from src.db.session import get_db
-from src.schemas.oauth import CalendarIntegrationResponse, OAuthInitiateResponse
+from src.schemas.oauth import CalendarIntegrationCreateResponse, OAuthInitiateResponse
 from src.services.oauth_google import GoogleOAuthService, OAuthError
 
 logger = logging.getLogger(__name__)
@@ -61,7 +61,7 @@ async def initiate_google_oauth(
         # In production, use Redis with TTL for automatic expiration
         oauth_states.clear()  # Simplified: clear all old states
         oauth_states[state] = {
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(UTC),
             "provider": "google",
         }
 
@@ -79,14 +79,14 @@ async def initiate_google_oauth(
         ) from e
 
 
-@router.get("/google/callback", response_model=CalendarIntegrationResponse)
+@router.get("/google/callback", response_model=CalendarIntegrationCreateResponse)
 async def google_oauth_callback(
     code: str = Query(..., description="Authorization code from Google"),
     state: str = Query(..., description="State parameter for validation"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     oauth_service: GoogleOAuthService = Depends(get_google_oauth_service),
-) -> CalendarIntegrationResponse:
+) -> CalendarIntegrationCreateResponse:
     """
     Handle Google OAuth callback
 
@@ -117,7 +117,7 @@ async def google_oauth_callback(
         encrypted_refresh_token = encrypt_token(tokens.get("refresh_token", ""))
 
         # Calculate token expiry
-        expires_at = datetime.utcnow() + timedelta(seconds=tokens["expires_in"])
+        expires_at = datetime.now(UTC) + timedelta(seconds=tokens["expires_in"])
 
         # Parse scopes from string to list
         scopes_list = tokens.get("scope", "").split() if tokens.get("scope") else []
@@ -139,7 +139,7 @@ async def google_oauth_callback(
 
         logger.info(f"Created calendar integration {integration.id} for user {current_user.id}")
 
-        return CalendarIntegrationResponse(
+        return CalendarIntegrationCreateResponse(
             message="Successfully connected Google Calendar",
             integration_id=str(integration.id),
             provider=integration.provider.value,
