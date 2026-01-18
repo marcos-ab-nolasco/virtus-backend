@@ -1,19 +1,25 @@
 """Service layer for CalendarIntegration operations."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import get_settings
 from src.core.encryption import decrypt_token, encrypt_token
-from src.db.models.calendar_integration import CalendarIntegration, IntegrationStatus
+from src.db.models.calendar_integration import (
+    CalendarIntegration,
+    CalendarProvider,
+    IntegrationStatus,
+)
 from src.schemas.calendar_integration import (
     CalendarIntegrationCreate,
     CalendarIntegrationUpdate,
 )
+from src.services.oauth_google import GoogleOAuthService, OAuthError
 
 
 async def create_integration(
@@ -189,6 +195,58 @@ async def get_decrypted_tokens(
 
     access_token = decrypt_token(integration.access_token)
     refresh_token = decrypt_token(integration.refresh_token)
+
+    now = datetime.now(timezone.utc)
+    if integration.token_expires_at <= now + timedelta(seconds=30):
+        if integration.provider == CalendarProvider.GOOGLE_CALENDAR:
+            settings = get_settings()
+            if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
+                integration.status = IntegrationStatus.TOKEN_EXPIRED
+                integration.sync_error = "Missing Google OAuth credentials for token refresh"
+                await db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Google OAuth credentials missing for token refresh",
+                )
+
+            redirect_uri = (
+                settings.GOOGLE_REDIRECT_URI
+                or "http://localhost:8000/api/v1/auth/google/callback"
+            )
+            oauth_service = GoogleOAuthService(
+                settings.GOOGLE_CLIENT_ID,
+                settings.GOOGLE_CLIENT_SECRET,
+                redirect_uri,
+            )
+            try:
+                tokens = await oauth_service.refresh_access_token(refresh_token)
+            except OAuthError as exc:
+                integration.status = IntegrationStatus.TOKEN_EXPIRED
+                integration.sync_error = str(exc)
+                await db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Failed to refresh Google Calendar token",
+                ) from exc
+
+            new_access_token = tokens.get("access_token")
+            expires_in = tokens.get("expires_in")
+            if not new_access_token or not expires_in:
+                integration.status = IntegrationStatus.ERROR
+                integration.sync_error = "Invalid token refresh response"
+                await db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Invalid token refresh response from Google",
+                )
+
+            new_token_expires_at = now + timedelta(seconds=expires_in)
+            await update_integration_tokens(
+                db, integration.id, new_access_token, new_token_expires_at
+            )
+            integration.sync_error = None
+            await db.commit()
+            access_token = new_access_token
 
     return access_token, refresh_token
 
