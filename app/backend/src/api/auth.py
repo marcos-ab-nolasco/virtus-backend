@@ -88,6 +88,12 @@ async def login(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Basic"},
         )
+    if user.is_blocked:
+        logger.warning(f"Login failed: email={credentials.username} reason=blocked")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is blocked",
+        )
 
     # Create tokens (sub must be string)
     access_token = create_access_token(data={"sub": str(user.id)})
@@ -141,6 +147,14 @@ async def refresh(
         await delete_session(refresh_cookie)
         clear_refresh_cookie(response)
         raise credentials_exception
+    if user.is_blocked:
+        logger.warning(f"Token refresh failed: reason=user_blocked user_id={user_id}")
+        await delete_session(refresh_cookie)
+        clear_refresh_cookie(response)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is blocked",
+        )
 
     # Rotate session cookie and mint new access token
     new_refresh_token = await replace_session(refresh_cookie, str(user.id))

@@ -83,11 +83,29 @@ async def get_current_user(
     if user is None:
         logger.warning(f"Invalid token: reason=user_not_found user_id={user_id}")
         raise credentials_exception
+    if user.is_blocked:
+        logger.warning(f"Blocked user access denied: user_id={user_id}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is blocked",
+        )
 
     # Store user_id in request state for middleware logging
     request.state.user_id = str(user_id)
 
     return user
+
+
+async def require_admin(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Dependency to ensure the current user is an admin."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return current_user
 
 
 def require_tier(required_tier: SubscriptionTier) -> Callable:

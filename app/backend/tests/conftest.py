@@ -190,6 +190,23 @@ async def test_user(db_session: AsyncSession) -> User:
 
 
 @pytest.fixture
+async def admin_user(db_session: AsyncSession) -> User:
+    """Create admin user."""
+    from src.core.security import hash_password
+
+    user = User(
+        email="admin@example.com",
+        hashed_password=hash_password("adminpassword123"),
+        full_name="Admin User",
+        is_admin=True,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest.fixture
 async def test_calendar_integration(db_session: AsyncSession, test_user: User):
     """Create test calendar integration."""
     from datetime import datetime, timedelta
@@ -223,4 +240,13 @@ def auth_headers(test_user: User) -> dict[str, str]:
     from src.core.security import create_access_token
 
     token = create_access_token(data={"sub": str(test_user.id)})
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def admin_headers(admin_user: User) -> dict[str, str]:
+    """Create authentication headers for admin user."""
+    from src.core.security import create_access_token
+
+    token = create_access_token(data={"sub": str(admin_user.id)})
     return {"Authorization": f"Bearer {token}"}

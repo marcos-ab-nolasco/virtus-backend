@@ -6,7 +6,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from src.api import auth, calendar, chat, oauth, onboarding, preferences, profile, subscription
+from src.api import (
+    admin,
+    auth,
+    calendar,
+    chat,
+    oauth,
+    onboarding,
+    preferences,
+    profile,
+    subscription,
+)
 from src.core.config import get_settings
 from src.core.lifespan import lifespan
 from src.core.logging_config.middleware import LoggingMiddleware
@@ -48,6 +58,7 @@ app.add_middleware(LoggingMiddleware)
 
 # Include routers
 app.include_router(auth.router)
+app.include_router(admin.router)
 app.include_router(oauth.router, prefix="/api/v1")
 app.include_router(chat.router)
 app.include_router(profile.router, prefix="/api/v1")
