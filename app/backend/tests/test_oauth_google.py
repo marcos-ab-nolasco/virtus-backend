@@ -203,9 +203,9 @@ class TestOAuthEndpoints:
     """Test OAuth API endpoints"""
 
     @pytest.mark.asyncio
-    async def test_initiate_oauth_returns_redirect_url(self, client):
+    async def test_initiate_oauth_returns_redirect_url(self, client, auth_headers):
         """GET /auth/google should return authorization URL"""
-        response = await client.get("/api/v1/auth/google")
+        response = await client.get("/api/v1/auth/google", headers=auth_headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -238,7 +238,13 @@ class TestOAuthEndpoints:
                 # Store state for validation
                 with patch(
                     "src.api.oauth.oauth_states",
-                    {"test-state": {"created_at": "test", "provider": "google"}},
+                    {
+                        "test-state": {
+                            "created_at": "test",
+                            "provider": "google",
+                            "user_id": str(test_user.id),
+                        }
+                    },
                 ):
                     response = await client.get(
                         "/api/v1/auth/google/callback?code=test-code&state=test-state",
@@ -338,7 +344,13 @@ class TestOAuthTokenEncryption:
                     # Store state for validation
                     with patch(
                         "src.api.oauth.oauth_states",
-                        {"test-state": {"created_at": "test", "provider": "google"}},
+                        {
+                            "test-state": {
+                                "created_at": "test",
+                                "provider": "google",
+                                "user_id": str(test_user.id),
+                            }
+                        },
                     ):
                         response = await client.get(
                             "/api/v1/auth/google/callback?code=test-code&state=test-state",

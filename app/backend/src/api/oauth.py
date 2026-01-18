@@ -6,8 +6,8 @@ Handles OAuth2 flow for external service integrations.
 
 import logging
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
@@ -73,11 +73,12 @@ async def initiate_google_oauth(
         # Store state temporarily (expires in 10 minutes)
         # In production, use Redis with TTL for automatic expiration
         oauth_states.clear()  # Simplified: clear all old states
-        oauth_states[state] = {
+        state_payload: dict[str, str | datetime] = {
             "created_at": datetime.now(UTC),
             "provider": "google",
-            "user_id": str(current_user.id),
         }
+        state_payload["user_id"] = str(current_user.id)
+        oauth_states[state] = state_payload
 
         logger.info(f"Initiated OAuth flow with state: {state[:8]}...")
         return OAuthInitiateResponse(
