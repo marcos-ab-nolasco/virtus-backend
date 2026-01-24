@@ -1,5 +1,7 @@
 """Admin service layer for user management."""
 
+import logging
+from datetime import time
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -8,6 +10,44 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.dependencies import _get_user_by_id
 from src.db.models.user import User
+from src.db.models.user_preferences import CommunicationStyle, UserPreferences, WeekDay
+from src.db.models.user_profile import OnboardingStatus, UserProfile
+from src.services import preferences as preferences_service
+from src.services import profile as profile_service
+
+logger = logging.getLogger(__name__)
+
+# Defaults for resetting preferences
+_PREFERENCES_DEFAULTS = {
+    "timezone": "UTC",
+    "morning_checkin_enabled": True,
+    "morning_checkin_time": time(8, 0),
+    "evening_checkin_enabled": True,
+    "evening_checkin_time": time(21, 0),
+    "weekly_review_day": WeekDay.SUNDAY,
+    "week_start_day": WeekDay.MONDAY,
+    "language": "pt-BR",
+    "communication_style": CommunicationStyle.DIRECT,
+    "coach_name": "Virtus",
+}
+
+_PROFILE_RESET_FIELDS = [
+    "vision_5_years",
+    "vision_5_years_themes",
+    "main_obstacle",
+    "annual_objectives",
+    "observed_patterns",
+    "moral_profile",
+    "strengths",
+    "interests",
+    "energy_activities",
+    "drain_activities",
+    "satisfaction_health",
+    "satisfaction_work",
+    "satisfaction_relationships",
+    "satisfaction_personal_time",
+    "dashboard_updated_at",
+]
 
 
 async def list_users(db: AsyncSession, *, limit: int, offset: int) -> tuple[list[User], int]:
@@ -84,3 +124,44 @@ async def delete_user(db: AsyncSession, *, target_user_id: UUID, actor_user_id: 
     await db.delete(user)
     await db.commit()
     await _get_user_by_id.invalidate(db, target_user_id)  # type: ignore[attr-defined]
+
+
+async def get_user_onboarding(
+    db: AsyncSession, *, target_user_id: UUID
+) -> tuple[UserProfile, UserPreferences]:
+    """Fetch onboarding-related data for a user."""
+    profile = await profile_service.get_user_profile(db, target_user_id)
+    preferences = await preferences_service.get_user_preferences(db, target_user_id)
+    return profile, preferences
+
+
+async def reset_user_onboarding(
+    db: AsyncSession, *, target_user_id: UUID, actor_user_id: UUID
+) -> tuple[UserProfile, UserPreferences]:
+    """Reset onboarding data, profile fields, and preferences to defaults."""
+    profile = await profile_service.get_user_profile(db, target_user_id)
+    preferences = await preferences_service.get_user_preferences(db, target_user_id)
+
+    profile.onboarding_status = OnboardingStatus.NOT_STARTED
+    profile.onboarding_started_at = None
+    profile.onboarding_completed_at = None
+    profile.onboarding_current_step = None
+    profile.onboarding_data = None
+
+    for field in _PROFILE_RESET_FIELDS:
+        setattr(profile, field, None)
+
+    for field, value in _PREFERENCES_DEFAULTS.items():
+        setattr(preferences, field, value)
+
+    await db.commit()
+    await db.refresh(profile)
+    await db.refresh(preferences)
+
+    logger.info(
+        "Admin reset onboarding: actor_user_id=%s target_user_id=%s",
+        actor_user_id,
+        target_user_id,
+    )
+
+    return profile, preferences

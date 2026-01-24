@@ -9,8 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.dependencies import require_admin
 from src.db.models.user import User
 from src.db.session import get_db
-from src.schemas.admin import AdminUserList
+from src.schemas.admin import AdminUserList, AdminUserOnboardingResponse
 from src.schemas.user import UserRead
+from src.schemas.user_preferences import UserPreferencesResponse
+from src.schemas.user_profile import UserProfileResponse
 from src.services import admin as admin_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -68,3 +70,35 @@ async def delete_user(
     """Delete a user."""
     await admin_service.delete_user(db, target_user_id=user_id, actor_user_id=current_admin.id)
     return None
+
+
+@router.get("/users/{user_id}/onboarding", response_model=AdminUserOnboardingResponse)
+async def get_user_onboarding(
+    user_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_admin: Annotated[User, Depends(require_admin)],
+) -> AdminUserOnboardingResponse:
+    """Get onboarding data for a user."""
+    profile, preferences = await admin_service.get_user_onboarding(db, target_user_id=user_id)
+    return AdminUserOnboardingResponse(
+        user_id=user_id,
+        profile=UserProfileResponse.model_validate(profile),
+        preferences=UserPreferencesResponse.model_validate(preferences),
+    )
+
+
+@router.post("/users/{user_id}/onboarding/reset", response_model=AdminUserOnboardingResponse)
+async def reset_user_onboarding(
+    user_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_admin: Annotated[User, Depends(require_admin)],
+) -> AdminUserOnboardingResponse:
+    """Reset onboarding data and preferences for a user."""
+    profile, preferences = await admin_service.reset_user_onboarding(
+        db, target_user_id=user_id, actor_user_id=current_admin.id
+    )
+    return AdminUserOnboardingResponse(
+        user_id=user_id,
+        profile=UserProfileResponse.model_validate(profile),
+        preferences=UserPreferencesResponse.model_validate(preferences),
+    )
