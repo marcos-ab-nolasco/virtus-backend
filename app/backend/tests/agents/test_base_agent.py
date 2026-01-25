@@ -1,0 +1,393 @@
+"""
+Tests for BaseAgent abstract class
+
+Following TDD approach:
+- RED: Write failing tests first
+- GREEN: Implement minimal code to pass
+- REFACTOR: Clean up and improve
+"""
+
+from abc import ABC
+from pathlib import Path
+from typing import Any
+from unittest.mock import Mock
+
+import pytest
+
+from src.agents.base import AgentResponse, BaseAgent
+from src.services.ai.base import BaseAIService
+from src.tools.base import BaseTool
+from src.tools.registry import ToolRegistry
+
+
+class ConcreteAgent(BaseAgent):
+    """Implementação concreta para testes."""
+
+    @property
+    def name(self) -> str:
+        return "test_agent"
+
+    @property
+    def skills(self) -> list[str]:
+        return ["test_skill"]
+
+    @property
+    def available_tools(self) -> list[str]:
+        return ["test_tool"]
+
+
+class TestAgentAbstractProperties:
+    """Testes para verificar que propriedades são abstratas."""
+
+    def test_base_agent_is_abstract(self) -> None:
+        """BaseAgent deve ser uma classe abstrata."""
+        assert issubclass(BaseAgent, ABC)
+
+    def test_cannot_instantiate_base_agent_directly(self) -> None:
+        """Não deve ser possível instanciar BaseAgent diretamente."""
+        mock_llm = Mock(spec=BaseAIService)
+        mock_registry = Mock(spec=ToolRegistry)
+
+        with pytest.raises(TypeError, match="abstract"):
+            BaseAgent(llm_service=mock_llm, tool_registry=mock_registry)  # type: ignore[abstract]
+
+    def test_name_is_abstract_property(self) -> None:
+        """Propriedade 'name' deve ser abstrata."""
+        assert hasattr(BaseAgent, "name")
+        assert getattr(BaseAgent.name, "fget", None) is not None
+
+    def test_skills_is_abstract_property(self) -> None:
+        """Propriedade 'skills' deve ser abstrata."""
+        assert hasattr(BaseAgent, "skills")
+        assert getattr(BaseAgent.skills, "fget", None) is not None
+
+    def test_available_tools_is_abstract_property(self) -> None:
+        """Propriedade 'available_tools' deve ser abstrata."""
+        assert hasattr(BaseAgent, "available_tools")
+        assert getattr(BaseAgent.available_tools, "fget", None) is not None
+
+
+class TestConcreteAgentProperties:
+    """Testes para propriedades do agente concreto."""
+
+    def setup_method(self) -> None:
+        """Setup para cada teste."""
+        self.mock_llm = Mock(spec=BaseAIService)
+        self.mock_registry = Mock(spec=ToolRegistry)
+        self.agent = ConcreteAgent(llm_service=self.mock_llm, tool_registry=self.mock_registry)
+
+    def test_concrete_agent_has_name(self) -> None:
+        """Agente concreto deve ter nome."""
+        assert self.agent.name == "test_agent"
+
+    def test_concrete_agent_has_skills(self) -> None:
+        """Agente concreto deve ter lista de skills."""
+        assert self.agent.skills == ["test_skill"]
+
+    def test_concrete_agent_has_available_tools(self) -> None:
+        """Agente concreto deve ter lista de tools disponíveis."""
+        assert self.agent.available_tools == ["test_tool"]
+
+
+class TestLoadSkillFile:
+    """Testes para carregamento de arquivos de skill."""
+
+    def setup_method(self) -> None:
+        """Setup para cada teste."""
+        self.mock_llm = Mock(spec=BaseAIService)
+        self.mock_registry = Mock(spec=ToolRegistry)
+        self.test_skills_path = Path(__file__).parent / "test_skills"
+
+    def test_load_skill_file_success(self, tmp_path: Path) -> None:
+        """Deve carregar arquivo .md existente."""
+        skills_dir = tmp_path / "skills" / "test_skill"
+        skills_dir.mkdir(parents=True)
+        skill_file = skills_dir / "instructions.md"
+        skill_file.write_text("# Test Skill\n\nInstruções do skill de teste.")
+
+        agent = ConcreteAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.mock_registry,
+            skills_path=tmp_path / "skills",
+        )
+
+        content = agent._load_skill_file("test_skill")
+        assert "# Test Skill" in content
+        assert "Instruções do skill de teste" in content
+
+    def test_load_skill_file_not_found(self, tmp_path: Path) -> None:
+        """Deve lançar FileNotFoundError para skill inexistente."""
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir(parents=True)
+
+        agent = ConcreteAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.mock_registry,
+            skills_path=skills_dir,
+        )
+
+        with pytest.raises(FileNotFoundError, match="nonexistent_skill"):
+            agent._load_skill_file("nonexistent_skill")
+
+
+class TestLoadSkills:
+    """Testes para carregamento de múltiplas skills."""
+
+    def setup_method(self) -> None:
+        """Setup para cada teste."""
+        self.mock_llm = Mock(spec=BaseAIService)
+        self.mock_registry = Mock(spec=ToolRegistry)
+
+    def test_load_skills_concatenates(self, tmp_path: Path) -> None:
+        """Deve concatenar múltiplas skills com separador."""
+        skills_dir = tmp_path / "skills"
+
+        # Criar skill 1
+        skill1_dir = skills_dir / "skill_one"
+        skill1_dir.mkdir(parents=True)
+        (skill1_dir / "instructions.md").write_text("# Skill One\nConteúdo um.")
+
+        # Criar skill 2
+        skill2_dir = skills_dir / "skill_two"
+        skill2_dir.mkdir(parents=True)
+        (skill2_dir / "instructions.md").write_text("# Skill Two\nConteúdo dois.")
+
+        class MultiSkillAgent(BaseAgent):
+            @property
+            def name(self) -> str:
+                return "multi_skill_agent"
+
+            @property
+            def skills(self) -> list[str]:
+                return ["skill_one", "skill_two"]
+
+            @property
+            def available_tools(self) -> list[str]:
+                return []
+
+        agent = MultiSkillAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.mock_registry,
+            skills_path=skills_dir,
+        )
+
+        result = agent.load_skills()
+
+        assert "# Skill One" in result
+        assert "# Skill Two" in result
+        assert "---" in result  # separador
+
+    def test_load_skills_empty_list(self, tmp_path: Path) -> None:
+        """Deve retornar string vazia quando não há skills."""
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir(parents=True)
+
+        class NoSkillsAgent(BaseAgent):
+            @property
+            def name(self) -> str:
+                return "no_skills_agent"
+
+            @property
+            def skills(self) -> list[str]:
+                return []
+
+            @property
+            def available_tools(self) -> list[str]:
+                return []
+
+        agent = NoSkillsAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.mock_registry,
+            skills_path=skills_dir,
+        )
+
+        result = agent.load_skills()
+        assert result == ""
+
+
+class TestBuildSystemPrompt:
+    """Testes para construção do system prompt."""
+
+    def setup_method(self) -> None:
+        """Setup para cada teste."""
+        self.mock_llm = Mock(spec=BaseAIService)
+        self.mock_registry = Mock(spec=ToolRegistry)
+
+    def test_build_system_prompt_structure(self, tmp_path: Path) -> None:
+        """System prompt deve incluir skills + contexto + instruções."""
+        skills_dir = tmp_path / "skills"
+        skill_dir = skills_dir / "test_skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "instructions.md").write_text("# Test Skill\nInstruções aqui.")
+
+        agent = ConcreteAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.mock_registry,
+            skills_path=skills_dir,
+        )
+
+        user_context = {"user_name": "João", "preference": "formal"}
+        prompt = agent.build_system_prompt(user_context)
+
+        # Deve conter o conteúdo da skill
+        assert "Test Skill" in prompt
+        # Deve conter o contexto
+        assert "João" in prompt or "user_name" in prompt
+
+    def test_build_system_prompt_with_empty_context(self, tmp_path: Path) -> None:
+        """Deve funcionar com contexto vazio."""
+        skills_dir = tmp_path / "skills"
+        skill_dir = skills_dir / "test_skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "instructions.md").write_text("# Test Skill")
+
+        agent = ConcreteAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.mock_registry,
+            skills_path=skills_dir,
+        )
+
+        prompt = agent.build_system_prompt({})
+        assert isinstance(prompt, str)
+        assert len(prompt) > 0
+
+
+class TestFormatContext:
+    """Testes para formatação de contexto."""
+
+    def setup_method(self) -> None:
+        """Setup para cada teste."""
+        self.mock_llm = Mock(spec=BaseAIService)
+        self.mock_registry = Mock(spec=ToolRegistry)
+        self.agent = ConcreteAgent(llm_service=self.mock_llm, tool_registry=self.mock_registry)
+
+    def test_format_context_with_data(self) -> None:
+        """Deve formatar contexto com dados."""
+        context = {"user_name": "Maria", "role": "admin"}
+        result = self.agent._format_context(context)
+
+        assert "user_name" in result or "Maria" in result
+        assert isinstance(result, str)
+
+    def test_format_context_handles_empty(self) -> None:
+        """Contexto vazio deve retornar string apropriada."""
+        result = self.agent._format_context({})
+        assert isinstance(result, str)
+
+
+class TestGetToolDefinitions:
+    """Testes para obtenção de definições de tools."""
+
+    def setup_method(self) -> None:
+        """Setup para cada teste."""
+        self.mock_llm = Mock(spec=BaseAIService)
+        self.mock_registry = ToolRegistry()
+
+    def test_get_tool_definitions_filters_by_available(self) -> None:
+        """Só deve retornar tools do available_tools."""
+
+        # Criar tool mock
+        class MockTool(BaseTool):
+            name = "test_tool"
+            description = "Tool de teste"
+            parameters: dict[str, Any] = {"type": "object", "properties": {}}
+
+            async def execute(self, args: dict[str, Any]) -> Any:
+                pass
+
+        class AnotherTool(BaseTool):
+            name = "another_tool"
+            description = "Outra tool"
+            parameters: dict[str, Any] = {"type": "object", "properties": {}}
+
+            async def execute(self, args: dict[str, Any]) -> Any:
+                pass
+
+        self.mock_registry.register(MockTool())
+        self.mock_registry.register(AnotherTool())
+
+        agent = ConcreteAgent(llm_service=self.mock_llm, tool_registry=self.mock_registry)
+
+        definitions = agent._get_tool_definitions()
+
+        # Só deve ter test_tool (que está em available_tools)
+        assert len(definitions) == 1
+        assert definitions[0]["function"]["name"] == "test_tool"
+
+    def test_get_tool_definitions_empty_when_no_tools(self) -> None:
+        """Deve retornar lista vazia quando não há tools disponíveis."""
+
+        class NoToolsAgent(BaseAgent):
+            @property
+            def name(self) -> str:
+                return "no_tools_agent"
+
+            @property
+            def skills(self) -> list[str]:
+                return []
+
+            @property
+            def available_tools(self) -> list[str]:
+                return []
+
+        agent = NoToolsAgent(llm_service=self.mock_llm, tool_registry=self.mock_registry)
+
+        definitions = agent._get_tool_definitions()
+        assert definitions == []
+
+
+class TestAgentResponse:
+    """Testes para dataclass AgentResponse."""
+
+    def test_create_response_with_text(self) -> None:
+        """Deve criar resposta com texto."""
+        response = AgentResponse(response="Olá, como posso ajudar?")
+        assert response.response == "Olá, como posso ajudar?"
+        assert response.tool_calls is None
+        assert response.next_agent is None
+        assert response.metadata == {}
+
+    def test_create_response_with_tool_calls(self) -> None:
+        """Deve criar resposta com tool calls."""
+        tool_calls = [{"name": "get_date", "arguments": {"timezone": "UTC"}}]
+        response = AgentResponse(response=None, tool_calls=tool_calls)
+
+        assert response.response is None
+        assert response.tool_calls == tool_calls
+
+    def test_create_response_with_next_agent(self) -> None:
+        """Deve criar resposta com redirecionamento para outro agente."""
+        response = AgentResponse(response="Redirecionando...", next_agent="specialist_agent")
+        assert response.next_agent == "specialist_agent"
+
+    def test_create_response_with_metadata(self) -> None:
+        """Deve criar resposta com metadados."""
+        metadata = {"confidence": 0.95, "tokens_used": 150}
+        response = AgentResponse(response="Resposta", metadata=metadata)
+        assert response.metadata == metadata
+
+
+class TestProcess:
+    """Testes para método process."""
+
+    def setup_method(self) -> None:
+        """Setup para cada teste."""
+        self.mock_llm = Mock(spec=BaseAIService)
+        self.mock_registry = Mock(spec=ToolRegistry)
+
+    @pytest.mark.asyncio
+    async def test_process_raises_not_implemented(self, tmp_path: Path) -> None:
+        """Process deve levantar NotImplementedError até LLM ser implementado."""
+        skills_dir = tmp_path / "skills"
+        skill_dir = skills_dir / "test_skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "instructions.md").write_text("# Test")
+
+        agent = ConcreteAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.mock_registry,
+            skills_path=skills_dir,
+        )
+
+        with pytest.raises(NotImplementedError, match="generate_response_with_tools"):
+            await agent.process(message="Olá", user_context={}, conversation_history=[])
