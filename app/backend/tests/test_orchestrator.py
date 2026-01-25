@@ -11,10 +11,10 @@ import pytest
 
 from src.agents.actions import Action, ActionType
 from src.agents.orchestrator import OrchestratorAgent
-from src.skills.base import SkillResult
-from src.skills.examples.get_current_date import GetCurrentDateSkill
-from src.skills.executor import SkillExecutor
-from src.skills.registry import SkillRegistry
+from src.tools.base import ToolResult
+from src.tools.examples.get_current_date import GetCurrentDateTool
+from src.tools.executor import ToolExecutor
+from src.tools.registry import ToolRegistry
 
 
 class TestOrchestratorAgent:
@@ -22,11 +22,11 @@ class TestOrchestratorAgent:
 
     def setup_method(self):
         """Setup orchestrator with mocked dependencies"""
-        self.registry = SkillRegistry()
-        self.executor = SkillExecutor(self.registry)
+        self.registry = ToolRegistry()
+        self.executor = ToolExecutor(self.registry)
 
-        # Register test skill
-        self.registry.register(GetCurrentDateSkill())
+        # Register test tool
+        self.registry.register(GetCurrentDateTool())
 
         # Mock LLM service
         self.mock_llm = AsyncMock()
@@ -39,8 +39,8 @@ class TestOrchestratorAgent:
 
         self.orchestrator = OrchestratorAgent(
             llm_service=self.mock_llm,
-            skill_registry=self.registry,
-            skill_executor=self.executor,
+            tool_registry=self.registry,
+            tool_executor=self.executor,
             context_service=self.mock_context,
         )
 
@@ -48,13 +48,13 @@ class TestOrchestratorAgent:
     async def test_orchestrator_initialization(self):
         """Orchestrator should initialize with dependencies"""
         assert self.orchestrator.llm_service == self.mock_llm
-        assert self.orchestrator.skill_registry == self.registry
-        assert self.orchestrator.skill_executor == self.executor
+        assert self.orchestrator.tool_registry == self.registry
+        assert self.orchestrator.tool_executor == self.executor
         assert self.orchestrator.context_service == self.mock_context
 
     @pytest.mark.asyncio
     async def test_process_message_direct_response(self):
-        """Should handle direct response (no skill needed)"""
+        """Should handle direct response (no tool needed)"""
         user_id = uuid4()
         message = "Hello, how are you?"
 
@@ -72,8 +72,8 @@ class TestOrchestratorAgent:
         assert response == "I'm doing well, thank you!"
 
     @pytest.mark.asyncio
-    async def test_process_message_with_skill_invocation(self):
-        """Should invoke skill when LLM requests it"""
+    async def test_process_message_with_tool_invocation(self):
+        """Should invoke tool when LLM requests it"""
         user_id = uuid4()
         message = "What time is it?"
 
@@ -89,7 +89,7 @@ class TestOrchestratorAgent:
             }
         )
 
-        # Mock second LLM call to format skill result
+        # Mock second LLM call to format tool result
         self.mock_llm.generate_response = AsyncMock(
             return_value="The current time is 2024-01-11T10:30:00+00:00"
         )
@@ -115,8 +115,8 @@ class TestOrchestratorAgent:
         assert action.type in [ActionType.DIRECT_RESPONSE, ActionType.SKILL_CALL]
 
     @pytest.mark.asyncio
-    async def test_decide_action_skill_call(self):
-        """Should decide to call skill for time-related queries"""
+    async def test_decide_action_tool_call(self):
+        """Should decide to call tool for time-related queries"""
         action = await self.orchestrator._decide_action(
             message="What time is it?",
             context={},
@@ -127,44 +127,44 @@ class TestOrchestratorAgent:
             assert action.skill_name is not None
 
     @pytest.mark.asyncio
-    async def test_execute_skill_action(self):
-        """Should execute skill and return result"""
+    async def test_execute_tool_action(self):
+        """Should execute tool and return result"""
         action = Action(
             type=ActionType.SKILL_CALL,
             skill_name="get_current_date",
             skill_args={"timezone": "UTC"},
         )
 
-        result = await self.orchestrator._execute_skill(action)
+        result = await self.orchestrator._execute_tool(action)
 
-        assert isinstance(result, SkillResult)
+        assert isinstance(result, ToolResult)
         assert result.success is True
 
     @pytest.mark.asyncio
-    async def test_execute_nonexistent_skill_returns_error(self):
-        """Should handle non-existent skill gracefully"""
+    async def test_execute_nonexistent_tool_returns_error(self):
+        """Should handle non-existent tool gracefully"""
         action = Action(
             type=ActionType.SKILL_CALL,
-            skill_name="nonexistent_skill",
+            skill_name="nonexistent_tool",
             skill_args={},
         )
 
-        result = await self.orchestrator._execute_skill(action)
+        result = await self.orchestrator._execute_tool(action)
 
-        assert isinstance(result, SkillResult)
+        assert isinstance(result, ToolResult)
         assert result.success is False
         assert result.error is not None
 
     @pytest.mark.asyncio
-    async def test_format_skill_result_for_llm(self):
-        """Should format skill result for LLM consumption"""
-        skill_result = SkillResult(
+    async def test_format_tool_result_for_llm(self):
+        """Should format tool result for LLM consumption"""
+        tool_result = ToolResult(
             success=True,
             data={"datetime": "2024-01-11T10:30:00Z", "timezone": "UTC"},
             error=None,
         )
 
-        formatted = self.orchestrator._format_skill_result(skill_result)
+        formatted = self.orchestrator._format_tool_result(tool_result)
 
         assert isinstance(formatted, str)
         assert "datetime" in formatted or "2024-01-11" in formatted
@@ -181,8 +181,8 @@ class TestActionDataClass:
         assert action.skill_name is None
         assert action.skill_args is None
 
-    def test_create_skill_call_action(self):
-        """Should create skill call action"""
+    def test_create_tool_call_action(self):
+        """Should create tool call action"""
         action = Action(
             type=ActionType.SKILL_CALL,
             skill_name="get_current_date",
@@ -199,15 +199,15 @@ class TestOrchestratorWithContext:
 
     def setup_method(self):
         """Setup orchestrator"""
-        self.registry = SkillRegistry()
-        self.executor = SkillExecutor(self.registry)
+        self.registry = ToolRegistry()
+        self.executor = ToolExecutor(self.registry)
         self.mock_llm = AsyncMock()
         self.mock_context = AsyncMock()
 
         self.orchestrator = OrchestratorAgent(
             llm_service=self.mock_llm,
-            skill_registry=self.registry,
-            skill_executor=self.executor,
+            tool_registry=self.registry,
+            tool_executor=self.executor,
             context_service=self.mock_context,
         )
 
@@ -239,15 +239,15 @@ class TestOrchestratorErrorHandling:
 
     def setup_method(self):
         """Setup orchestrator"""
-        self.registry = SkillRegistry()
-        self.executor = SkillExecutor(self.registry)
+        self.registry = ToolRegistry()
+        self.executor = ToolExecutor(self.registry)
         self.mock_llm = AsyncMock()
         self.mock_context = AsyncMock()
 
         self.orchestrator = OrchestratorAgent(
             llm_service=self.mock_llm,
-            skill_registry=self.registry,
-            skill_executor=self.executor,
+            tool_registry=self.registry,
+            tool_executor=self.executor,
             context_service=self.mock_context,
         )
 
@@ -269,12 +269,12 @@ class TestOrchestratorErrorHandling:
         assert any(word in response.lower() for word in ["error", "sorry", "apologize", "trouble"])
 
     @pytest.mark.asyncio
-    async def test_handles_skill_execution_failure(self):
-        """Should handle skill execution failure"""
-        # Register a skill that will fail
-        self.registry.register(GetCurrentDateSkill())
+    async def test_handles_tool_execution_failure(self):
+        """Should handle tool execution failure"""
+        # Register a tool that will fail
+        self.registry.register(GetCurrentDateTool())
 
-        # Mock LLM to request skill with invalid args
+        # Mock LLM to request tool with invalid args
         self.mock_llm.chat_with_tools = AsyncMock(
             return_value={
                 "tool_calls": [
@@ -286,7 +286,7 @@ class TestOrchestratorErrorHandling:
             }
         )
 
-        # Mock second call to handle skill error
+        # Mock second call to handle tool error
         self.mock_llm.generate_response = AsyncMock(
             return_value="I encountered an error getting the time."
         )
@@ -308,15 +308,15 @@ class TestOrchestratorLogging:
 
     def setup_method(self):
         """Setup orchestrator"""
-        self.registry = SkillRegistry()
-        self.executor = SkillExecutor(self.registry)
+        self.registry = ToolRegistry()
+        self.executor = ToolExecutor(self.registry)
         self.mock_llm = AsyncMock()
         self.mock_context = AsyncMock()
 
         self.orchestrator = OrchestratorAgent(
             llm_service=self.mock_llm,
-            skill_registry=self.registry,
-            skill_executor=self.executor,
+            tool_registry=self.registry,
+            tool_executor=self.executor,
             context_service=self.mock_context,
         )
 

@@ -1,6 +1,6 @@
-"""SkillOnboardingShort - Guides user through short onboarding flow.
+"""ToolOnboardingShort - Guides user through short onboarding flow.
 
-Issue 3.2: Deterministic skill for guiding onboarding steps.
+Issue 3.2: Deterministic tool for guiding onboarding steps.
 """
 
 from typing import Any
@@ -10,14 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.session import get_async_sessionmaker
 from src.services import onboarding as onboarding_service
-from src.skills.base import BaseSkill, SkillResult
-from src.skills.onboarding.steps import (
+from src.tools.base import BaseTool, ToolResult
+from src.tools.onboarding.steps import (
     STEP_DEFINITIONS,
     OnboardingStep,
     get_next_step,
     get_step_from_string,
 )
-from src.skills.onboarding.validators import STEP_EXTRACTORS, STEP_VALIDATORS
+from src.tools.onboarding.validators import STEP_EXTRACTORS, STEP_VALIDATORS
 
 
 class _SessionWrapper:
@@ -38,7 +38,7 @@ class _SessionWrapper:
             await self._session.close()
 
 
-class SkillOnboardingShort(BaseSkill):
+class ToolOnboardingShort(BaseTool):
     """Skill that guides users through the short onboarding flow.
 
     Actions:
@@ -84,14 +84,14 @@ class SkillOnboardingShort(BaseSkill):
         """
         self._db_session = db_session
 
-    async def execute(self, args: dict[str, Any]) -> SkillResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         """Execute the skill with the given arguments.
 
         Args:
             args: Dictionary with user_id, action, and optional user_response
 
         Returns:
-            SkillResult with action-specific data
+            ToolResult with action-specific data
         """
         try:
             # Extract parameters
@@ -99,17 +99,15 @@ class SkillOnboardingShort(BaseSkill):
             action = args.get("action")
 
             if not user_id_str:
-                return SkillResult(
-                    success=False, data=None, error="Missing required field: user_id"
-                )
+                return ToolResult(success=False, data=None, error="Missing required field: user_id")
 
             if not action:
-                return SkillResult(success=False, data=None, error="Missing required field: action")
+                return ToolResult(success=False, data=None, error="Missing required field: action")
 
             try:
                 user_id = UUID(user_id_str)
             except (ValueError, TypeError):
-                return SkillResult(
+                return ToolResult(
                     success=False, data=None, error=f"Invalid UUID format: {user_id_str}"
                 )
 
@@ -122,10 +120,10 @@ class SkillOnboardingShort(BaseSkill):
             elif action == "get_status":
                 return await self._handle_get_status(user_id)
             else:
-                return SkillResult(success=False, data=None, error=f"Unknown action: {action}")
+                return ToolResult(success=False, data=None, error=f"Unknown action: {action}")
 
         except Exception as e:
-            return SkillResult(
+            return ToolResult(
                 success=False,
                 data=None,
                 error=f"Skill execution failed: {type(e).__name__}: {str(e)}",
@@ -145,14 +143,14 @@ class SkillOnboardingShort(BaseSkill):
         session = session_factory()
         return _SessionWrapper(session, owns_session=True)
 
-    async def _handle_start(self, user_id: UUID) -> SkillResult:
+    async def _handle_start(self, user_id: UUID) -> ToolResult:
         """Handle the start action - begin onboarding.
 
         Args:
             user_id: User's UUID
 
         Returns:
-            SkillResult with welcome message and status
+            ToolResult with welcome message and status
         """
         async with await self._get_db_session() as db:
             try:
@@ -161,7 +159,7 @@ class SkillOnboardingShort(BaseSkill):
                 # Get welcome step definition
                 welcome_step = STEP_DEFINITIONS[OnboardingStep.WELCOME]
 
-                return SkillResult(
+                return ToolResult(
                     success=True,
                     data={
                         "status": profile.onboarding_status.value,
@@ -175,9 +173,9 @@ class SkillOnboardingShort(BaseSkill):
                 error_msg = str(e)
                 if hasattr(e, "detail"):
                     error_msg = e.detail
-                return SkillResult(success=False, data=None, error=error_msg)
+                return ToolResult(success=False, data=None, error=error_msg)
 
-    async def _handle_process_response(self, user_id: UUID, user_response: str) -> SkillResult:
+    async def _handle_process_response(self, user_id: UUID, user_response: str) -> ToolResult:
         """Handle the process_response action - validate and save user response.
 
         Args:
@@ -185,7 +183,7 @@ class SkillOnboardingShort(BaseSkill):
             user_response: User's text response
 
         Returns:
-            SkillResult with validation result and next step info
+            ToolResult with validation result and next step info
         """
         async with await self._get_db_session() as db:
             try:
@@ -194,11 +192,11 @@ class SkillOnboardingShort(BaseSkill):
                 current_step_str = state["current_step"]
 
                 if not current_step_str:
-                    return SkillResult(success=False, data=None, error="Onboarding not started")
+                    return ToolResult(success=False, data=None, error="Onboarding not started")
 
                 current_step = get_step_from_string(current_step_str)
                 if not current_step:
-                    return SkillResult(
+                    return ToolResult(
                         success=False, data=None, error=f"Invalid step: {current_step_str}"
                     )
 
@@ -253,7 +251,7 @@ class SkillOnboardingShort(BaseSkill):
                             if name:
                                 next_message = f"Prazer em te conhecer, {name}! {next_message}"
 
-                return SkillResult(
+                return ToolResult(
                     success=True,
                     data={
                         "is_valid": is_valid,
@@ -270,16 +268,16 @@ class SkillOnboardingShort(BaseSkill):
                 error_msg = str(e)
                 if hasattr(e, "detail"):
                     error_msg = e.detail
-                return SkillResult(success=False, data=None, error=error_msg)
+                return ToolResult(success=False, data=None, error=error_msg)
 
-    async def _handle_get_status(self, user_id: UUID) -> SkillResult:
+    async def _handle_get_status(self, user_id: UUID) -> ToolResult:
         """Handle the get_status action - return current onboarding state.
 
         Args:
             user_id: User's UUID
 
         Returns:
-            SkillResult with current onboarding state
+            ToolResult with current onboarding state
         """
         async with await self._get_db_session() as db:
             try:
@@ -292,7 +290,7 @@ class SkillOnboardingShort(BaseSkill):
                     if current_step and current_step in STEP_DEFINITIONS:
                         current_message = STEP_DEFINITIONS[current_step]["prompt"]
 
-                return SkillResult(
+                return ToolResult(
                     success=True,
                     data={
                         "status": state["status"],
@@ -309,4 +307,4 @@ class SkillOnboardingShort(BaseSkill):
                 error_msg = str(e)
                 if hasattr(e, "detail"):
                     error_msg = e.detail
-                return SkillResult(success=False, data=None, error=error_msg)
+                return ToolResult(success=False, data=None, error=error_msg)

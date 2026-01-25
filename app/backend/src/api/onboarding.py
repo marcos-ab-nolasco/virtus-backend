@@ -21,8 +21,8 @@ from src.schemas.onboarding import (
     OnboardingStatusResponse,
 )
 from src.services import onboarding as onboarding_service
-from src.skills.onboarding.skill_onboarding_short import SkillOnboardingShort
-from src.skills.onboarding.steps import STEP_DEFINITIONS, get_step_from_string
+from src.tools.onboarding.skill_onboarding_short import ToolOnboardingShort
+from src.tools.onboarding.steps import STEP_DEFINITIONS, get_step_from_string
 
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
@@ -65,8 +65,8 @@ async def start_onboarding(
         )
 
     # Start new onboarding
-    skill = SkillOnboardingShort(db_session=db)
-    result = await skill.execute({"user_id": str(current_user.id), "action": "start"})
+    tool = ToolOnboardingShort(db_session=db)
+    result = await tool.execute({"user_id": str(current_user.id), "action": "start"})
 
     if not result.success or result.data is None:
         raise HTTPException(
@@ -117,9 +117,9 @@ async def process_message(
             detail="Onboarding already completed",
         )
 
-    # Process the message using skill
-    skill = SkillOnboardingShort(db_session=db)
-    result = await skill.execute(
+    # Process the message using tool
+    tool = ToolOnboardingShort(db_session=db)
+    result = await tool.execute(
         {
             "user_id": str(current_user.id),
             "action": "process_response",

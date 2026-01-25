@@ -1,5 +1,5 @@
 """
-GetCurrentDate Skill
+GetCurrentDate Tool
 
 Returns the current date and time, optionally with timezone support.
 """
@@ -8,12 +8,12 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from src.skills.base import BaseSkill, SkillResult
+from src.tools.base import BaseTool, ToolResult
 
 
-class GetCurrentDateSkill(BaseSkill):
+class GetCurrentDateTool(BaseTool):
     """
-    Skill that returns the current date and time
+    Tool that returns the current date and time
 
     Parameters:
         timezone (optional): Timezone name (e.g., "UTC", "America/New_York")
@@ -43,15 +43,15 @@ class GetCurrentDateSkill(BaseSkill):
         "required": [],
     }
 
-    async def execute(self, args: dict[str, Any]) -> SkillResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         """
-        Execute the skill to get current date/time
+        Execute the tool to get current date/time
 
         Args:
             args: Dictionary with optional "timezone" and "format" keys
 
         Returns:
-            SkillResult with current date/time information
+            ToolResult with current date/time information
         """
         try:
             # Extract arguments with defaults
@@ -75,7 +75,7 @@ class GetCurrentDateSkill(BaseSkill):
             else:  # iso
                 formatted_date = now.isoformat()
 
-            return SkillResult(
+            return ToolResult(
                 success=True,
                 data={
                     "datetime": formatted_date,
@@ -90,6 +90,6 @@ class GetCurrentDateSkill(BaseSkill):
             )
 
         except Exception as e:
-            return SkillResult(
+            return ToolResult(
                 success=False, data=None, error=f"Failed to get current date: {str(e)}"
             )

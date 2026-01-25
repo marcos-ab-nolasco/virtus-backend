@@ -1,7 +1,7 @@
 """
-Base classes for the Skills System
+Base classes for the Tools System
 
-Defines the interface that all skills must implement.
+Defines the interface that all tools must implement.
 """
 
 from abc import ABC, abstractmethod
@@ -10,9 +10,9 @@ from typing import Any
 
 
 @dataclass
-class SkillParameter:
+class ToolParameter:
     """
-    Represents a skill parameter with metadata
+    Represents a tool parameter with metadata
 
     Attributes:
         name: Parameter name
@@ -42,12 +42,12 @@ class SkillParameter:
 
 
 @dataclass
-class SkillResult:
+class ToolResult:
     """
-    Result of skill execution
+    Result of tool execution
 
     Attributes:
-        success: Whether the skill executed successfully
+        success: Whether the tool executed successfully
         data: Result data (any JSON-serializable type)
         error: Error message if execution failed
     """
@@ -65,16 +65,16 @@ class SkillResult:
         }
 
 
-class BaseSkill(ABC):
+class BaseTool(ABC):
     """
-    Abstract base class for all skills
+    Abstract base class for all tools
 
-    All skills must inherit from this class and implement the execute method.
+    All tools must inherit from this class and implement the execute method.
 
     Attributes:
-        name: Unique identifier for the skill
-        description: Human-readable description of what the skill does
-        parameters: JSONSchema definition of the skill's parameters
+        name: Unique identifier for the tool
+        description: Human-readable description of what the tool does
+        parameters: JSONSchema definition of the tool's parameters
     """
 
     name: str
@@ -82,24 +82,24 @@ class BaseSkill(ABC):
     parameters: dict[str, Any] = field(default_factory=dict)
 
     @abstractmethod
-    async def execute(self, args: dict[str, Any]) -> SkillResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         """
-        Execute the skill with the given arguments
+        Execute the tool with the given arguments
 
         Args:
             args: Dictionary of arguments matching the parameters schema
 
         Returns:
-            SkillResult indicating success/failure and result data
+            ToolResult indicating success/failure and result data
 
         Raises:
-            Any exceptions should be caught and returned as SkillResult with error
+            Any exceptions should be caught and returned as ToolResult with error
         """
         pass
 
     def to_tool_definition(self) -> dict[str, Any]:
         """
-        Convert skill to LLM tool definition format
+        Convert tool to LLM tool definition format
 
         Returns tool definition compatible with OpenAI/Anthropic function calling
         """

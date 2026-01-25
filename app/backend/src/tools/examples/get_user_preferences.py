@@ -1,5 +1,5 @@
 """
-GetUserPreferences Skill
+GetUserPreferences Tool
 
 Retrieves the preferences for a specific user.
 """
@@ -11,12 +11,12 @@ from sqlalchemy import select
 
 from src.db.models.user_preferences import UserPreferences
 from src.db.session import get_async_sessionmaker
-from src.skills.base import BaseSkill, SkillResult
+from src.tools.base import BaseTool, ToolResult
 
 
-class GetUserPreferencesSkill(BaseSkill):
+class GetUserPreferencesTool(BaseTool):
     """
-    Skill that retrieves user preferences
+    Tool that retrieves user preferences
 
     Parameters:
         user_id: UUID of the user
@@ -38,28 +38,26 @@ class GetUserPreferencesSkill(BaseSkill):
         "required": ["user_id"],
     }
 
-    async def execute(self, args: dict[str, Any]) -> SkillResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         """
-        Execute the skill to get user preferences
+        Execute the tool to get user preferences
 
         Args:
             args: Dictionary with "user_id" key
 
         Returns:
-            SkillResult with user preferences data
+            ToolResult with user preferences data
         """
         try:
             # Extract user_id
             user_id_str = args.get("user_id")
             if not user_id_str:
-                return SkillResult(
-                    success=False, data=None, error="Missing required field: user_id"
-                )
+                return ToolResult(success=False, data=None, error="Missing required field: user_id")
 
             try:
                 user_id = UUID(user_id_str)
             except (ValueError, TypeError):
-                return SkillResult(
+                return ToolResult(
                     success=False, data=None, error=f"Invalid UUID format: {user_id_str}"
                 )
 
@@ -71,7 +69,7 @@ class GetUserPreferencesSkill(BaseSkill):
                 prefs = result.scalar_one_or_none()
 
                 if prefs is None:
-                    return SkillResult(
+                    return ToolResult(
                         success=False,
                         data=None,
                         error=f"User preferences not found for user_id: {user_id}",
@@ -102,10 +100,10 @@ class GetUserPreferencesSkill(BaseSkill):
                     "coach_name": prefs.coach_name,
                 }
 
-                return SkillResult(success=True, data=prefs_data, error=None)
+                return ToolResult(success=True, data=prefs_data, error=None)
 
         except Exception as e:
-            return SkillResult(
+            return ToolResult(
                 success=False,
                 data=None,
                 error=f"Failed to get user preferences: {type(e).__name__}: {str(e)}",

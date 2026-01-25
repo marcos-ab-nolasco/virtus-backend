@@ -1,5 +1,5 @@
 """
-GetCalendarEvents Skill
+GetCalendarEvents Tool
 
 Retrieves calendar events for a user within a specified date range.
 """
@@ -12,12 +12,12 @@ from sqlalchemy import select
 
 from src.db.models.calendar_event import CalendarEvent
 from src.db.session import get_async_sessionmaker
-from src.skills.base import BaseSkill, SkillResult
+from src.tools.base import BaseTool, ToolResult
 
 
-class GetCalendarEventsSkill(BaseSkill):
+class GetCalendarEventsTool(BaseTool):
     """
-    Skill that retrieves calendar events for a user
+    Tool that retrieves calendar events for a user
 
     Parameters:
         user_id: UUID of the user
@@ -51,28 +51,26 @@ class GetCalendarEventsSkill(BaseSkill):
         "required": ["user_id"],
     }
 
-    async def execute(self, args: dict[str, Any]) -> SkillResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         """
-        Execute the skill to get calendar events
+        Execute the tool to get calendar events
 
         Args:
             args: Dictionary with "user_id", "days_ahead", and "limit" keys
 
         Returns:
-            SkillResult with calendar events data
+            ToolResult with calendar events data
         """
         try:
             # Extract and validate user_id
             user_id_str = args.get("user_id")
             if not user_id_str:
-                return SkillResult(
-                    success=False, data=None, error="Missing required field: user_id"
-                )
+                return ToolResult(success=False, data=None, error="Missing required field: user_id")
 
             try:
                 user_id = UUID(user_id_str)
             except (ValueError, TypeError):
-                return SkillResult(
+                return ToolResult(
                     success=False, data=None, error=f"Invalid UUID format: {user_id_str}"
                 )
 
@@ -119,7 +117,7 @@ class GetCalendarEventsSkill(BaseSkill):
                         }
                     )
 
-                return SkillResult(
+                return ToolResult(
                     success=True,
                     data={
                         "events": events_data,
@@ -131,7 +129,7 @@ class GetCalendarEventsSkill(BaseSkill):
                 )
 
         except Exception as e:
-            return SkillResult(
+            return ToolResult(
                 success=False,
                 data=None,
                 error=f"Failed to get calendar events: {type(e).__name__}: {str(e)}",

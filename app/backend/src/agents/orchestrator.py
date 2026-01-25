@@ -1,10 +1,10 @@
 """
-Orchestrator Agent - Routes user messages to skills or direct responses
+Orchestrator Agent - Routes user messages to tools or direct responses
 
 The orchestrator is responsible for:
 1. Building user context
-2. Deciding whether to invoke a skill or respond directly
-3. Executing skills when needed
+2. Deciding whether to invoke a tool or respond directly
+3. Executing tools when needed
 4. Formatting responses
 """
 
@@ -14,16 +14,16 @@ from typing import Any
 from uuid import UUID
 
 from src.agents.actions import Action, ActionType
-from src.skills.base import SkillResult
-from src.skills.executor import SkillExecutor
-from src.skills.registry import SkillRegistry
+from src.tools.base import ToolResult
+from src.tools.executor import ToolExecutor
+from src.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
 
 class OrchestratorAgent:
     """
-    Orchestrator agent that routes messages and invokes skills
+    Orchestrator agent that routes messages and invokes tools
 
     The orchestrator uses a simple keyword-based routing initially,
     which can be evolved to LLM-based routing later.
@@ -32,8 +32,8 @@ class OrchestratorAgent:
     def __init__(
         self,
         llm_service: Any,
-        skill_registry: SkillRegistry,
-        skill_executor: SkillExecutor,
+        tool_registry: ToolRegistry,
+        tool_executor: ToolExecutor,
         context_service: Any,
     ):
         """
@@ -41,13 +41,13 @@ class OrchestratorAgent:
 
         Args:
             llm_service: LLM service for generating responses
-            skill_registry: Registry of available skills
-            skill_executor: Executor for running skills
+            tool_registry: Registry of available tools
+            tool_executor: Executor for running tools
             context_service: Service for building user context
         """
         self.llm_service = llm_service
-        self.skill_registry = skill_registry
-        self.skill_executor = skill_executor
+        self.tool_registry = tool_registry
+        self.tool_executor = tool_executor
         self.context_service = context_service
 
     async def process_message(
@@ -80,25 +80,25 @@ class OrchestratorAgent:
 
             # Step 3: Execute action
             if action.type == ActionType.SKILL_CALL:
-                # Execute skill
-                logger.info(f"Executing skill: {action.skill_name}")
-                skill_result = await self._execute_skill(action)
+                # Execute tool
+                logger.info(f"Executing tool: {action.skill_name}")
+                tool_result = await self._execute_tool(action)
 
-                # Format skill result and generate response
-                if skill_result.success:
-                    skill_output = self._format_skill_result(skill_result)
-                    response = await self._generate_response_with_skill_result(
+                # Format tool result and generate response
+                if tool_result.success:
+                    tool_output = self._format_tool_result(tool_result)
+                    response = await self._generate_response_with_tool_result(
                         message=message,
-                        skill_name=action.skill_name or "",
-                        skill_result=skill_output,
+                        tool_name=action.skill_name or "",
+                        tool_result=tool_output,
                         context=context,
                     )
                 else:
-                    # Skill failed, generate error response
-                    logger.warning(f"Skill execution failed: {skill_result.error}")
+                    # Tool failed, generate error response
+                    logger.warning(f"Tool execution failed: {tool_result.error}")
                     response = await self._generate_error_response(
                         message=message,
-                        error=skill_result.error or "Unknown error",
+                        error=tool_result.error or "Unknown error",
                         context=context,
                     )
             else:
@@ -182,73 +182,73 @@ class OrchestratorAgent:
         else:
             return Action(
                 type=ActionType.DIRECT_RESPONSE,
-                reasoning="No matching skill, direct response",
+                reasoning="No matching tool, direct response",
             )
 
-    async def _execute_skill(self, action: Action) -> SkillResult:
+    async def _execute_tool(self, action: Action) -> ToolResult:
         """
-        Execute a skill action
+        Execute a tool action
 
         Args:
-            action: Action with skill details
+            action: Action with tool details
 
         Returns:
-            SkillResult from execution
+            ToolResult from execution
         """
         try:
             if action.skill_name is None:
-                return SkillResult(
+                return ToolResult(
                     success=False,
                     data=None,
-                    error="No skill name specified",
+                    error="No tool name specified",
                 )
 
-            return await self.skill_executor.execute(
-                skill_name=action.skill_name,
+            return await self.tool_executor.execute(
+                tool_name=action.skill_name,
                 args=action.skill_args or {},
             )
         except Exception as e:
-            logger.error(f"Error executing skill: {e}", exc_info=True)
-            return SkillResult(
+            logger.error(f"Error executing tool: {e}", exc_info=True)
+            return ToolResult(
                 success=False,
                 data=None,
                 error=str(e),
             )
 
-    def _format_skill_result(self, skill_result: SkillResult) -> str:
+    def _format_tool_result(self, tool_result: ToolResult) -> str:
         """
-        Format skill result for LLM consumption
+        Format tool result for LLM consumption
 
         Args:
-            skill_result: Result from skill execution
+            tool_result: Result from tool execution
 
         Returns:
             Formatted string
         """
-        if skill_result.data is None:
+        if tool_result.data is None:
             return "No data returned"
 
         try:
             # Format as JSON for structured data
-            return json.dumps(skill_result.data, indent=2, ensure_ascii=False)
+            return json.dumps(tool_result.data, indent=2, ensure_ascii=False)
         except Exception:
             # Fallback to string representation
-            return str(skill_result.data)
+            return str(tool_result.data)
 
-    async def _generate_response_with_skill_result(
+    async def _generate_response_with_tool_result(
         self,
         message: str,
-        skill_name: str,
-        skill_result: str,
+        tool_name: str,
+        tool_result: str,
         context: dict[str, Any],
     ) -> str:
         """
-        Generate response incorporating skill result
+        Generate response incorporating tool result
 
         Args:
             message: Original user message
-            skill_name: Name of skill that was executed
-            skill_result: Formatted skill result
+            tool_name: Name of tool that was executed
+            tool_result: Formatted tool result
             context: User context
 
         Returns:
@@ -259,8 +259,8 @@ class OrchestratorAgent:
             system_prompt = f"""You are a helpful AI assistant.
 The user asked: "{message}"
 
-You invoked the skill '{skill_name}' and got this result:
-{skill_result}
+You invoked the tool '{tool_name}' and got this result:
+{tool_result}
 
 Use this information to provide a helpful, conversational response to the user.
 Be natural and friendly."""
@@ -271,13 +271,13 @@ Be natural and friendly."""
             )
             return response
         except Exception as e:
-            logger.error(f"Error generating response with skill result: {e}")
-            # Fallback: return skill result directly
-            return f"Here's what I found:\n{skill_result}"
+            logger.error(f"Error generating response with tool result: {e}")
+            # Fallback: return tool result directly
+            return f"Here's what I found:\n{tool_result}"
 
     async def _generate_direct_response(self, message: str, context: dict[str, Any]) -> str:
         """
-        Generate direct LLM response without skill
+        Generate direct LLM response without tool
 
         Args:
             message: User's message
@@ -302,11 +302,11 @@ Be natural and friendly."""
         self, message: str, error: str, context: dict[str, Any]
     ) -> str:
         """
-        Generate response when skill execution failed
+        Generate response when tool execution failed
 
         Args:
             message: Original user message
-            error: Error message from skill
+            error: Error message from tool
             context: User context
 
         Returns:
