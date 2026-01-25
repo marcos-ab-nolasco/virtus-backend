@@ -203,9 +203,9 @@ class TestOAuthEndpoints:
     """Test OAuth API endpoints"""
 
     @pytest.mark.asyncio
-    async def test_initiate_oauth_returns_redirect_url(self, client):
+    async def test_initiate_oauth_returns_redirect_url(self, client, auth_headers):
         """GET /auth/google should return authorization URL"""
-        response = await client.get("/api/v1/auth/google")
+        response = await client.get("/api/v1/auth/google", headers=auth_headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -238,26 +238,47 @@ class TestOAuthEndpoints:
                 # Store state for validation
                 with patch(
                     "src.api.oauth.oauth_states",
-                    {"test-state": {"created_at": "test", "provider": "google"}},
+                    {
+                        "test-state": {
+                            "created_at": "test",
+                            "provider": "google",
+                            "user_id": str(test_user.id),
+                        }
+                    },
                 ):
                     response = await client.get(
                         "/api/v1/auth/google/callback?code=test-code&state=test-state",
                         headers=auth_headers,
                     )
 
-                    assert response.status_code == 200
-                    data = response.json()
-                    assert "message" in data
-                    assert "integration_id" in data
+                    assert response.status_code == 303
+                    redirect_url = response.headers["location"]
+                    assert "status=connected" in redirect_url
+                    assert "provider=google" in redirect_url
+                    assert "integration_id=" in redirect_url
 
     @pytest.mark.asyncio
     async def test_oauth_callback_missing_code_returns_error(self, client, auth_headers):
         """Callback without code should return error"""
-        response = await client.get("/api/v1/auth/google/callback", headers=auth_headers)
+        with patch(
+            "src.api.oauth.oauth_states",
+            {
+                "test-state": {
+                    "created_at": "test",
+                    "provider": "google",
+                    "user_id": "00000000-0000-0000-0000-000000000000",
+                }
+            },
+        ):
+            response = await client.get(
+                "/api/v1/auth/google/callback?state=test-state",
+                headers=auth_headers,
+            )
 
-        assert response.status_code == 422  # FastAPI validation error
-        data = response.json()
-        assert "detail" in data
+        assert response.status_code == 303
+        redirect_url = response.headers["location"]
+        assert "status=failed" in redirect_url
+        assert "reason=oauth_failed" in redirect_url
 
     @pytest.mark.asyncio
     async def test_oauth_callback_invalid_state_returns_error(self, client, auth_headers):
@@ -269,10 +290,10 @@ class TestOAuthEndpoints:
                 headers=auth_headers,
             )
 
-            assert response.status_code == 400
-            data = response.json()
-            assert "detail" in data
-            assert "state" in data["detail"].lower()
+            assert response.status_code == 303
+            redirect_url = response.headers["location"]
+            assert "status=failed" in redirect_url
+            assert "reason=invalid_state" in redirect_url
 
 
 class TestOAuthStateManagement:
@@ -338,14 +359,20 @@ class TestOAuthTokenEncryption:
                     # Store state for validation
                     with patch(
                         "src.api.oauth.oauth_states",
-                        {"test-state": {"created_at": "test", "provider": "google"}},
+                        {
+                            "test-state": {
+                                "created_at": "test",
+                                "provider": "google",
+                                "user_id": str(test_user.id),
+                            }
+                        },
                     ):
                         response = await client.get(
                             "/api/v1/auth/google/callback?code=test-code&state=test-state",
                             headers=auth_headers,
                         )
 
-                        assert response.status_code == 200
+                        assert response.status_code == 303
                         # Verify encrypt_token was called twice (access + refresh)
                         assert mock_encrypt.call_count == 2
 

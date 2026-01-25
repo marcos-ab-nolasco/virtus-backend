@@ -1,13 +1,32 @@
-# virtus backend
+# Virtus Backend
 
-Backend do Virtus v3 (API REST + agentes/skills) com base em Python/FastAPI.
+Backend do Virtus v3 (API REST + agentes/skills) em Python/FastAPI.
 
-## O que existe hoje
+## Estado da construcao
 
-- Fundacao e core (M1): PostgreSQL + migrations, autenticacao JWT, entidades User/Subscription/UserPreferences, API REST base.
-- OAuth Google (M2): fluxo de autorizacao, entidade CalendarIntegration e armazenamento seguro de tokens.
-- Infra basica de agentes/skills (M2): provedor LLM, registry de skills e orquestrador base.
-- Onboarding funcional (M3): fluxo conversacional guiado para configuracao de perfil, com persistencia de estado e validacao por step.
+### Concluido (M1-M3)
+
+- Fundacao: PostgreSQL + migrations, autenticacao JWT, entidades base e API REST.
+- OAuth Google: fluxo de autorizacao, CalendarIntegration e armazenamento seguro de tokens.
+- Infra de agentes/skills: provedor LLM, registry de skills e orquestrador base.
+- Onboarding conversacional: fluxo guiado com persistencia de estado e validacao por step.
+
+### Em andamento
+
+- M4 (preparacao): ajustes de API e orquestracao para integrar plenamente agentes/skills com o frontend.
+
+## Visao geral do produto final
+
+- Plataforma de assistente conversacional com onboarding, perfil e preferencias.
+- Integracao de calendario via Google para enriquecer contexto e execucao de tarefas.
+- Orquestrador de agentes + skills deterministicas para fluxos repetiveis e confiaveis.
+- API REST estavel, pronta para canais web e futuros canais (ex.: WhatsApp).
+
+## Proximos passos
+
+- Consolidar rotas e contratos para M4 (agentes/skills + chat).
+- Reforcar observabilidade e tratamento de erros em fluxos conversacionais.
+- Revisar seguranca e limites de rate para uso em producao.
 
 ## Arquitetura (alto nivel)
 
@@ -26,6 +45,14 @@ Backend do Virtus v3 (API REST + agentes/skills) com base em Python/FastAPI.
 - httpx, tenacity, slowapi
 - openai, anthropic
 
+## API e rotas principais
+
+- Base path: `/api/v1`
+- Auth: `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`
+- Onboarding: `POST /onboarding/start`, `POST /onboarding/message`, `GET /onboarding/status`, `PATCH /onboarding/skip`
+- Perfil e preferencias: `GET/PATCH /me/profile`, `GET/PATCH /me/preferences`
+- OAuth calendario: `GET /auth/google`, `GET /auth/google/callback`, `GET /me/calendar/integrations`
+
 ## Estrutura de pastas (resumo)
 
 - `app/backend/src/api`: rotas e controllers HTTP
@@ -34,7 +61,3 @@ Backend do Virtus v3 (API REST + agentes/skills) com base em Python/FastAPI.
 - `app/backend/src/services`: integracoes e regras de negocio
 - `app/backend/src/db`: modelos, sessoes e migrations
 - `app/backend/src/core`: configuracoes e utilitarios
-
-## Status atual
-
-- Milestone M3 concluido: onboarding conversacional com API REST, skill deterministica e testes E2E.
