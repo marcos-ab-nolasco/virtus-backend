@@ -93,6 +93,11 @@
 	cd app/backend && DATABASE_URL="postgresql+asyncpg://test:test@localhost:5433/virtus_db_test" .venv/bin/alembic upgrade head
 	@echo "Test database migrations applied!"
 
+    test-migrate-downgrade:
+	@echo "Applying migrations to test database..."
+	cd app/backend && DATABASE_URL="postgresql+asyncpg://test:test@localhost:5433/virtus_db_test" .venv/bin/alembic downgrade -1
+	@echo "Test database migrations applied!"
+
     test-migrate-reset: ## Reset test database migrations (downgrade to base then upgrade)
 	@echo "Resetting test database migrations..."
 	cd app/backend && DATABASE_URL="postgresql+asyncpg://test:test@localhost:5433/virtus_db_test" .venv/bin/alembic downgrade base
