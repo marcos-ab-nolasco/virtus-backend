@@ -2,31 +2,14 @@
 
 Backend do Virtus v3 (API REST + agentes/skills) em Python/FastAPI.
 
-## Estado da construcao
-
-### Concluido (M1-M3)
-
-- Fundacao: PostgreSQL + migrations, autenticacao JWT, entidades base e API REST.
-- OAuth Google: fluxo de autorizacao, CalendarIntegration e armazenamento seguro de tokens.
-- Infra de agentes/skills: provedor LLM, registry de skills e orquestrador base.
-- Onboarding conversacional: fluxo guiado com persistencia de estado e validacao por step.
-
-### Em andamento
-
-- M4 (preparacao): ajustes de API e orquestracao para integrar plenamente agentes/skills com o frontend.
-
-## Visao geral do produto final
+## O que esta implementado
 
 - Plataforma de assistente conversacional com onboarding, perfil e preferencias.
 - Integracao de calendario via Google para enriquecer contexto e execucao de tarefas.
 - Orquestrador de agentes + skills deterministicas para fluxos repetiveis e confiaveis.
 - API REST estavel, pronta para canais web e futuros canais (ex.: WhatsApp).
-
-## Proximos passos
-
-- Consolidar rotas e contratos para M4 (agentes/skills + chat).
-- Reforcar observabilidade e tratamento de erros em fluxos conversacionais.
-- Revisar seguranca e limites de rate para uso em producao.
+- Autenticacao com JWT e sessao de refresh token em Redis.
+- Rate limiting por rota.
 
 ## Arquitetura (alto nivel)
 
@@ -47,11 +30,15 @@ Backend do Virtus v3 (API REST + agentes/skills) em Python/FastAPI.
 
 ## API e rotas principais
 
-- Base path: `/api/v1`
+- Health check: `GET /health_check`
 - Auth: `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`
-- Onboarding: `POST /onboarding/start`, `POST /onboarding/message`, `GET /onboarding/status`, `PATCH /onboarding/skip`
-- Perfil e preferencias: `GET/PATCH /me/profile`, `GET/PATCH /me/preferences`
-- OAuth calendario: `GET /auth/google`, `GET /auth/google/callback`, `GET /me/calendar/integrations`
+- Admin: `GET /admin/users`, `PATCH /admin/users/{user_id}/block`, `PATCH /admin/users/{user_id}/unblock`, `DELETE /admin/users/{user_id}`, `GET /admin/users/{user_id}/onboarding`, `POST /admin/users/{user_id}/onboarding/reset`
+- Chat: `POST /chat/conversations`, `GET /chat/conversations`, `GET /chat/conversations/{conversation_id}`, `PATCH /chat/conversations/{conversation_id}`, `DELETE /chat/conversations/{conversation_id}`, `GET /chat/conversations/{conversation_id}/messages`, `POST /chat/conversations/{conversation_id}/messages`, `GET /chat/providers`
+- Onboarding (v1): `POST /api/v1/onboarding/start`, `POST /api/v1/onboarding/message`, `GET /api/v1/onboarding/status`, `PATCH /api/v1/onboarding/skip`
+- Perfil e preferencias (v1): `GET/PATCH /api/v1/me/profile`, `GET/PATCH /api/v1/me/preferences`
+- Subscription (v1): `GET/PATCH /api/v1/me/subscription`
+- OAuth calendario (v1): `GET /api/v1/auth/google`, `GET /api/v1/auth/google/callback`
+- Calendario (v1): `POST /api/v1/me/calendar/integrations`, `GET /api/v1/me/calendar/integrations`, `GET /api/v1/me/calendar/integrations/{integration_id}`, `PATCH /api/v1/me/calendar/integrations/{integration_id}`, `DELETE /api/v1/me/calendar/integrations/{integration_id}`, `GET /api/v1/me/calendar/events`
 
 ## Estrutura de pastas (resumo)
 
