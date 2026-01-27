@@ -33,11 +33,19 @@ class CommunicationStyle(str, enum.Enum):
     MOTIVATING = "MOTIVATING"
 
 
+class ContactFrequency(str, enum.Enum):
+    """Preferred frequency of contact from the AI coach."""
+
+    RARELY = "RARELY"
+    SOMETIMES = "SOMETIMES"
+    FREQUENTLY = "FREQUENTLY"
+
+
 class UserPreferences(Base):
     """User preferences for app behavior and AI personalization.
 
-    Stores user configuration for check-ins, communication style, and scheduling.
-    Created automatically when User is created (via SQLAlchemy event).
+    Stores user configuration for check-ins, communication style, contact frequency,
+    and scheduling. Created automatically when User is created (via SQLAlchemy event).
     """
 
     __tablename__ = "user_preferences"
@@ -118,6 +126,11 @@ class UserPreferences(Base):
     coach_name: Mapped[str] = mapped_column(
         String(50),
         default="Virtus",
+        nullable=False,
+    )
+    contact_frequency: Mapped[ContactFrequency] = mapped_column(
+        Enum(ContactFrequency, native_enum=False, name="contact_frequency_enum"),
+        default=ContactFrequency.SOMETIMES,
         nullable=False,
     )
 

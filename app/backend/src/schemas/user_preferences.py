@@ -26,6 +26,10 @@ class UserPreferencesBase(BaseModel):
         max_length=50,
         description="Custom name for the AI coach",
     )
+    contact_frequency: str = Field(
+        default="SOMETIMES",
+        description="Preferred contact frequency (RARELY, SOMETIMES, FREQUENTLY, case-insensitive)",
+    )
 
     @field_validator("timezone")
     @classmethod
@@ -55,6 +59,15 @@ class UserPreferencesBase(BaseModel):
             raise ValueError(f"Invalid style: {v}. Must be one of {valid_styles}")
         return v.upper()
 
+    @field_validator("contact_frequency")
+    @classmethod
+    def validate_contact_frequency(cls, v: str) -> str:
+        """Validate contact frequency (accepts case-insensitive, returns UPPERCASE)."""
+        valid_frequencies = ["RARELY", "SOMETIMES", "FREQUENTLY"]
+        if v.upper() not in valid_frequencies:
+            raise ValueError(f"Invalid frequency: {v}. Must be one of {valid_frequencies}")
+        return v.upper()
+
 
 class UserPreferencesUpdate(BaseModel):
     """Schema for updating UserPreferences (partial update via PATCH).
@@ -75,6 +88,10 @@ class UserPreferencesUpdate(BaseModel):
     )
     coach_name: str | None = Field(
         None, min_length=1, max_length=50, description="Custom name for the AI coach"
+    )
+    contact_frequency: str | None = Field(
+        None,
+        description="Preferred contact frequency (rarely, sometimes, frequently)",
     )
 
     @field_validator("timezone")
@@ -112,6 +129,18 @@ class UserPreferencesUpdate(BaseModel):
         valid_styles = ["DIRECT", "GENTLE", "MOTIVATING"]
         if v.upper() not in valid_styles:
             raise ValueError(f"Invalid style: {v}. Must be one of {valid_styles}")
+        return v.upper()
+
+    @field_validator("contact_frequency")
+    @classmethod
+    def validate_contact_frequency(cls, v: str | None) -> str | None:
+        """Validate contact frequency (accepts case-insensitive, returns UPPERCASE)."""
+        if v is None:
+            return v
+
+        valid_frequencies = ["RARELY", "SOMETIMES", "FREQUENTLY"]
+        if v.upper() not in valid_frequencies:
+            raise ValueError(f"Invalid frequency: {v}. Must be one of {valid_frequencies}")
         return v.upper()
 
 
