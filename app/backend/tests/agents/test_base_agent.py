@@ -10,7 +10,7 @@ Following TDD approach:
 from abc import ABC
 from pathlib import Path
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -376,12 +376,21 @@ class TestProcess:
         self.mock_registry = Mock(spec=ToolRegistry)
 
     @pytest.mark.asyncio
-    async def test_process_raises_not_implemented(self, tmp_path: Path) -> None:
-        """Process deve levantar NotImplementedError até LLM ser implementado."""
+    async def test_process_calls_llm_with_tools(self, tmp_path: Path) -> None:
+        """Process deve chamar LLM com tools e retornar AgentResponse."""
         skills_dir = tmp_path / "skills"
         skill_dir = skills_dir / "test_skill"
         skill_dir.mkdir(parents=True)
         (skill_dir / "instructions.md").write_text("# Test")
+
+        # Mock LLM response
+        self.mock_llm.generate_response_with_tools = AsyncMock(
+            return_value={
+                "content": "Hello! How can I help you?",
+                "tool_calls": None,
+                "finish_reason": "stop",
+            }
+        )
 
         agent = ConcreteAgent(
             llm_service=self.mock_llm,
@@ -389,5 +398,26 @@ class TestProcess:
             skills_path=skills_dir,
         )
 
-        with pytest.raises(NotImplementedError, match="generate_response_with_tools"):
-            await agent.process(message="Olá", user_context={}, conversation_history=[])
+        response = await agent.process(
+            message="Olá", user_context={"user_id": "123"}, conversation_history=[]
+        )
+
+        # Verify LLM was called
+        self.mock_llm.generate_response_with_tools.assert_called_once()
+        call_kwargs = self.mock_llm.generate_response_with_tools.call_args.kwargs
+
+        # Verify system prompt was built
+        assert "system_prompt" in call_kwargs
+        assert len(call_kwargs["system_prompt"]) > 0
+
+        # Verify messages include user message
+        assert "messages" in call_kwargs
+        assert call_kwargs["messages"][-1]["content"] == "Olá"
+
+        # Verify tools were passed
+        assert "tools" in call_kwargs
+
+        # Verify AgentResponse
+        assert response.response == "Hello! How can I help you?"
+        assert response.tool_calls is None
+        assert response.metadata["finish_reason"] == "stop"

@@ -191,9 +191,6 @@ class BaseAgent(ABC):
 
         Returns:
             AgentResponse com resposta e/ou tool calls
-
-        Raises:
-            NotImplementedError: Até que generate_response_with_tools seja implementado
         """
         # Preparar system prompt
         system_prompt = self.build_system_prompt(user_context)
@@ -204,13 +201,16 @@ class BaseAgent(ABC):
         # Preparar mensagens
         messages = [*conversation_history, {"role": "user", "content": message}]
 
-        # TODO: Chamar LLM com tools
-        # Isso requer um método generate_response_with_tools no BaseAIService
-        # que ainda não foi implementado
-        raise NotImplementedError(
-            "O método process() depende de llm.generate_response_with_tools() "
-            "que será implementado no próximo item do checklist. "
-            f"System prompt: {len(system_prompt)} chars, "
-            f"Tools: {len(tool_definitions)}, "
-            f"Messages: {len(messages)}"
+        # Chamar LLM com tools
+        result = await self.llm.generate_response_with_tools(
+            messages=messages,
+            system_prompt=system_prompt,
+            tools=tool_definitions,
+        )
+
+        # Return as AgentResponse
+        return AgentResponse(
+            response=result.get("content"),
+            tool_calls=result.get("tool_calls"),
+            metadata={"finish_reason": result.get("finish_reason")},
         )
