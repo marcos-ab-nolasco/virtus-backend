@@ -8,7 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.security import hash_password
 from src.db.models.user import User
-from src.db.models.user_preferences import CommunicationStyle, UserPreferences, WeekDay
+from src.db.models.user_preferences import (
+    CommunicationStyle,
+    ContactFrequency,
+    UserPreferences,
+    WeekDay,
+)
 
 
 @pytest.mark.asyncio
@@ -33,6 +38,7 @@ async def test_user_has_auto_created_preferences_with_defaults(
     assert preferences.weekly_review_day == WeekDay.SUNDAY
     assert preferences.communication_style == CommunicationStyle.DIRECT
     assert preferences.coach_name == "Virtus"
+    assert preferences.contact_frequency == ContactFrequency.SOMETIMES
     assert isinstance(preferences.created_at, datetime)
     assert isinstance(preferences.updated_at, datetime)
 
@@ -336,3 +342,68 @@ async def test_language_field_custom_value(db_session: AsyncSession, test_user: 
     await db_session.refresh(preferences)
 
     assert preferences.language == "es-ES"
+
+
+# Tests for contact_frequency field
+
+
+@pytest.mark.asyncio
+async def test_contact_frequency_default(db_session: AsyncSession, test_user: User):
+    """Test that UserPreferences has contact_frequency with SOMETIMES default."""
+    result = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.user_id == test_user.id)
+    )
+    preferences = result.scalar_one()
+
+    assert hasattr(preferences, "contact_frequency")
+    assert preferences.contact_frequency == ContactFrequency.SOMETIMES
+
+
+@pytest.mark.asyncio
+async def test_contact_frequency_enum_values(db_session: AsyncSession):
+    """Test all ContactFrequency enum values can be set."""
+    test_frequencies = [
+        ContactFrequency.RARELY,
+        ContactFrequency.SOMETIMES,
+        ContactFrequency.FREQUENTLY,
+    ]
+
+    for frequency in test_frequencies:
+        user = User(
+            email=f"test_{frequency.value}@example.com",
+            hashed_password=hash_password("testpassword123"),
+            full_name=f"Test User {frequency.value}",
+        )
+        db_session.add(user)
+        await db_session.commit()
+        await db_session.refresh(user)
+
+        result = await db_session.execute(
+            select(UserPreferences).where(UserPreferences.user_id == user.id)
+        )
+        preferences = result.scalar_one()
+
+        preferences.contact_frequency = frequency
+        await db_session.commit()
+        await db_session.refresh(preferences)
+
+        assert preferences.contact_frequency == frequency
+
+
+@pytest.mark.asyncio
+async def test_contact_frequency_update_persistence(db_session: AsyncSession, test_user: User):
+    """Test that contact_frequency updates persist across sessions."""
+    result = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.user_id == test_user.id)
+    )
+    preferences = result.scalar_one()
+
+    preferences.contact_frequency = ContactFrequency.FREQUENTLY
+    await db_session.commit()
+
+    result = await db_session.execute(
+        select(UserPreferences).where(UserPreferences.user_id == test_user.id)
+    )
+    refreshed_preferences = result.scalar_one()
+
+    assert refreshed_preferences.contact_frequency == ContactFrequency.FREQUENTLY

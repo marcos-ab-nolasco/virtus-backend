@@ -99,3 +99,78 @@ async def test_patch_my_preferences_unauthenticated(client: AsyncClient):
     response = await client.patch("/api/v1/me/preferences", json=payload)
 
     assert response.status_code == 401
+
+
+# Tests for contact_frequency field
+
+
+@pytest.mark.asyncio
+async def test_get_preferences_includes_contact_frequency(
+    client: AsyncClient, test_user: User, auth_headers: dict
+):
+    """Test GET /api/v1/me/preferences includes contact_frequency."""
+    response = await client.get("/api/v1/me/preferences", headers=auth_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "contact_frequency" in data
+    assert data["contact_frequency"] == "SOMETIMES"
+
+
+@pytest.mark.asyncio
+async def test_patch_preferences_update_contact_frequency(
+    client: AsyncClient, test_user: User, auth_headers: dict
+):
+    """Test PATCH /api/v1/me/preferences updates contact_frequency."""
+    payload = {"contact_frequency": "frequently"}
+
+    response = await client.patch("/api/v1/me/preferences", json=payload, headers=auth_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["contact_frequency"] == "FREQUENTLY"
+
+
+@pytest.mark.asyncio
+async def test_patch_preferences_contact_frequency_case_insensitive(
+    client: AsyncClient, test_user: User, auth_headers: dict
+):
+    """Test PATCH accepts case-insensitive contact_frequency."""
+    payload = {"contact_frequency": "RaReLy"}
+
+    response = await client.patch("/api/v1/me/preferences", json=payload, headers=auth_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["contact_frequency"] == "RARELY"
+
+
+@pytest.mark.asyncio
+async def test_patch_preferences_invalid_contact_frequency(client: AsyncClient, auth_headers: dict):
+    """Test PATCH with invalid contact_frequency returns 422."""
+    payload = {"contact_frequency": "INVALID_VALUE"}
+
+    response = await client.patch("/api/v1/me/preferences", json=payload, headers=auth_headers)
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_patch_preferences_preserves_other_fields_when_updating_contact_frequency(
+    client: AsyncClient, test_user: User, auth_headers: dict
+):
+    """Test updating contact_frequency doesn't affect other fields."""
+    setup_payload = {
+        "timezone": "America/Sao_Paulo",
+        "coach_name": "Athena",
+    }
+    await client.patch("/api/v1/me/preferences", json=setup_payload, headers=auth_headers)
+
+    payload = {"contact_frequency": "rarely"}
+    response = await client.patch("/api/v1/me/preferences", json=payload, headers=auth_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["contact_frequency"] == "RARELY"
+    assert data["timezone"] == "America/Sao_Paulo"
+    assert data["coach_name"] == "Athena"

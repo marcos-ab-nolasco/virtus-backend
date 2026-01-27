@@ -14,7 +14,7 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models.user import User
-from src.db.models.user_preferences import CommunicationStyle, WeekDay
+from src.db.models.user_preferences import CommunicationStyle, ContactFrequency, WeekDay
 from src.schemas.user_preferences import UserPreferencesUpdate
 from src.services import preferences as preferences_service
 
@@ -142,3 +142,53 @@ async def test_get_user_preferences_returns_fresh_data(db_session: AsyncSession,
     preferences = await preferences_service.get_user_preferences(db_session, test_user.id)
 
     assert preferences.timezone == "America/New_York"
+
+
+# Tests for contact_frequency field
+
+
+@pytest.mark.asyncio
+async def test_update_contact_frequency(db_session: AsyncSession, test_user: User):
+    """Test updating contact_frequency through service."""
+    update_data = UserPreferencesUpdate(contact_frequency="rarely")
+
+    updated_prefs = await preferences_service.update_user_preferences(
+        db_session, test_user.id, update_data
+    )
+
+    assert updated_prefs.contact_frequency == ContactFrequency.RARELY
+
+
+@pytest.mark.asyncio
+async def test_update_contact_frequency_case_insensitive(db_session: AsyncSession, test_user: User):
+    """Test contact_frequency validation is case-insensitive."""
+    for input_value, expected in [
+        ("rarely", ContactFrequency.RARELY),
+        ("RARELY", ContactFrequency.RARELY),
+        ("sometimes", ContactFrequency.SOMETIMES),
+        ("FREQUENTLY", ContactFrequency.FREQUENTLY),
+    ]:
+        update_data = UserPreferencesUpdate(contact_frequency=input_value)
+        updated_prefs = await preferences_service.update_user_preferences(
+            db_session, test_user.id, update_data
+        )
+        assert updated_prefs.contact_frequency == expected
+
+
+@pytest.mark.asyncio
+async def test_partial_update_preserves_contact_frequency(
+    db_session: AsyncSession, test_user: User
+):
+    """Test that partial updates don't overwrite contact_frequency."""
+    # Set contact frequency to RARELY
+    update_data_1 = UserPreferencesUpdate(contact_frequency="rarely")
+    await preferences_service.update_user_preferences(db_session, test_user.id, update_data_1)
+
+    # Update only timezone
+    update_data_2 = UserPreferencesUpdate(timezone="America/Sao_Paulo")
+    updated_prefs = await preferences_service.update_user_preferences(
+        db_session, test_user.id, update_data_2
+    )
+
+    assert updated_prefs.contact_frequency == ContactFrequency.RARELY
+    assert updated_prefs.timezone == "America/Sao_Paulo"
