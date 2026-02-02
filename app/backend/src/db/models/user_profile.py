@@ -124,6 +124,13 @@ class UserProfile(Base):
         comment="Partial onboarding data (name, goals, preferences, conversation_history)",
     )
 
+    # User identity
+    preferred_name: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="Como o usuário prefere ser chamado (ex: 'Má', 'Capitão')",
+    )
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
