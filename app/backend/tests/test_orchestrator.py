@@ -17,6 +17,23 @@ from src.tools.executor import ToolExecutor
 from src.tools.registry import ToolRegistry
 
 
+def get_completed_onboarding_context(user_id: str = "test-user") -> dict:
+    """Return context for user with completed onboarding."""
+    return {
+        "user": {"id": user_id, "full_name": "Test User", "email": "test@example.com"},
+        "profile": {
+            "onboarding_status": "COMPLETED",
+            "onboarding_current_step": None,
+            "preferred_name": None,
+        },
+        "preferences": {
+            "timezone": "UTC",
+            "contact_frequency": "SOMETIMES",
+            "communication_style": "DIRECT",
+        },
+    }
+
+
 class TestOrchestratorAgent:
     """Test OrchestratorAgent core functionality"""
 
@@ -31,10 +48,10 @@ class TestOrchestratorAgent:
         # Mock LLM service
         self.mock_llm = AsyncMock()
 
-        # Mock context service
+        # Mock context service with completed onboarding
         self.mock_context = AsyncMock()
         self.mock_context.build_permanent_context = AsyncMock(
-            return_value={"user": {"id": "test-user"}}
+            return_value=get_completed_onboarding_context()
         )
 
         self.orchestrator = OrchestratorAgent(
@@ -256,7 +273,9 @@ class TestOrchestratorErrorHandling:
         """Should handle LLM failure gracefully"""
         self.mock_llm.generate_response = AsyncMock(side_effect=Exception("LLM API error"))
 
-        self.mock_context.build_permanent_context = AsyncMock(return_value={"user": {}})
+        self.mock_context.build_permanent_context = AsyncMock(
+            return_value=get_completed_onboarding_context()
+        )
 
         response = await self.orchestrator.process_message(
             user_id=uuid4(),
@@ -266,7 +285,8 @@ class TestOrchestratorErrorHandling:
 
         # Should return error message instead of crashing
         assert isinstance(response, str)
-        assert any(word in response.lower() for word in ["error", "sorry", "apologize", "trouble"])
+        # Error message is in Portuguese now
+        assert any(word in response.lower() for word in ["desculpe", "dificuldade", "erro"])
 
     @pytest.mark.asyncio
     async def test_handles_tool_execution_failure(self):

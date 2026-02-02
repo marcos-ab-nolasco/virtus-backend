@@ -3,17 +3,22 @@ Orchestrator Agent - Routes user messages to tools or direct responses
 
 The orchestrator is responsible for:
 1. Building user context
-2. Deciding whether to invoke a tool or respond directly
-3. Executing tools when needed
-4. Formatting responses
+2. Checking if onboarding is needed
+3. Deciding whether to invoke a tool or respond directly
+4. Executing tools when needed
+5. Formatting responses
+
+Refactored to inherit from BaseAgent and use skills.
 """
 
 import json
 import logging
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 from src.agents.actions import Action, ActionType
+from src.agents.base import AgentResponse, BaseAgent
 from src.tools.base import ToolResult
 from src.tools.executor import ToolExecutor
 from src.tools.registry import ToolRegistry
@@ -21,12 +26,12 @@ from src.tools.registry import ToolRegistry
 logger = logging.getLogger(__name__)
 
 
-class OrchestratorAgent:
+class OrchestratorAgent(BaseAgent):
     """
-    Orchestrator agent that routes messages and invokes tools
+    Orchestrator agent that routes messages and invokes tools.
 
-    The orchestrator uses a simple keyword-based routing initially,
-    which can be evolved to LLM-based routing later.
+    Inherits from BaseAgent to use skills-based system prompts.
+    Maintains backward compatibility with process_message() API.
     """
 
     def __init__(
@@ -35,20 +40,65 @@ class OrchestratorAgent:
         tool_registry: ToolRegistry,
         tool_executor: ToolExecutor,
         context_service: Any,
+        skills_path: Path | None = None,
     ):
         """
-        Initialize orchestrator with dependencies
+        Initialize orchestrator with dependencies.
 
         Args:
             llm_service: LLM service for generating responses
             tool_registry: Registry of available tools
             tool_executor: Executor for running tools
             context_service: Service for building user context
+            skills_path: Optional path to skills folder
         """
-        self.llm_service = llm_service
-        self.tool_registry = tool_registry
+        super().__init__(
+            llm_service=llm_service,
+            tool_registry=tool_registry,
+            skills_path=skills_path,
+        )
         self.tool_executor = tool_executor
         self.context_service = context_service
+
+        # Keep references with original names for backward compatibility
+        self.llm_service = llm_service
+        self.tool_registry = tool_registry
+
+    @property
+    def name(self) -> str:
+        return "orchestrator"
+
+    @property
+    def skills(self) -> list[str]:
+        return [
+            "shared/persona_base",
+            "shared/tom_ajuste",
+            "shared/contexto_usuario",
+            "orchestrator/classificacao_intencao",
+            "orchestrator/roteamento",
+        ]
+
+    @property
+    def available_tools(self) -> list[str]:
+        # Orchestrator can use all registered tools for now
+        return list(self.tool_registry.list_tools())
+
+    def should_route_to_onboarding(self, context: dict[str, Any]) -> bool:
+        """
+        Check if user needs to be routed to onboarding.
+
+        Args:
+            context: User context with profile data
+
+        Returns:
+            True if onboarding is needed
+        """
+        profile = context.get("profile")
+        if not profile:
+            return True
+
+        onboarding_status = profile.get("onboarding_status")
+        return onboarding_status != "COMPLETED"
 
     async def process_message(
         self,
@@ -57,7 +107,9 @@ class OrchestratorAgent:
         conversation_id: UUID,
     ) -> str:
         """
-        Process a user message and return a response
+        Process a user message and return a response.
+
+        This is the main entry point, maintaining backward compatibility.
 
         Args:
             user_id: UUID of the user
@@ -74,11 +126,16 @@ class OrchestratorAgent:
             context = await self._build_context(user_id)
             logger.debug(f"Built context: {context}")
 
-            # Step 2: Decide action
+            # Step 2: Check if onboarding is needed
+            if self.should_route_to_onboarding(context):
+                logger.info("User needs onboarding, returning handoff signal")
+                return await self._handle_onboarding_needed(message, context)
+
+            # Step 3: Decide action
             action = await self._decide_action(message, context)
             logger.info(f"Decided action: {action.type.value}")
 
-            # Step 3: Execute action
+            # Step 4: Execute action
             if action.type == ActionType.SKILL_CALL:
                 # Execute tool
                 logger.info(f"Executing tool: {action.skill_name}")
@@ -112,9 +169,42 @@ class OrchestratorAgent:
             logger.error(f"Error processing message: {e}", exc_info=True)
             return self._get_fallback_error_message()
 
+    async def _handle_onboarding_needed(
+        self, message: str, context: dict[str, Any]
+    ) -> str:
+        """
+        Handle case when user needs onboarding.
+
+        For now, returns a message indicating onboarding is needed.
+        In the future, this will be handled by AgentRouter.
+
+        Args:
+            message: User's message
+            context: User context
+
+        Returns:
+            Response indicating onboarding is needed
+        """
+        # Get user's preferred name or full name
+        user_info = context.get("user", {})
+        profile_info = context.get("profile", {})
+        preferred_name = profile_info.get("preferred_name")
+        full_name = user_info.get("full_name", "")
+        name = preferred_name or (full_name.split()[0] if full_name else "")
+
+        greeting = f"Olá{', ' + name if name else ''}!"
+
+        return f"""{greeting}
+
+Antes de começarmos, preciso te conhecer um pouco melhor. Vou fazer algumas perguntas rápidas - leva só 3-5 minutos.
+
+Isso vai me ajudar a te acompanhar do jeito que funciona melhor pra você.
+
+Vamos lá?"""
+
     async def _build_context(self, user_id: UUID) -> dict[str, Any]:
         """
-        Build user context for the conversation
+        Build user context for the conversation.
 
         Args:
             user_id: UUID of the user
@@ -136,7 +226,7 @@ class OrchestratorAgent:
 
     async def _decide_action(self, message: str, context: dict[str, Any]) -> Action:
         """
-        Decide what action to take based on the message
+        Decide what action to take based on the message.
 
         Currently uses simple keyword matching.
         Can be evolved to use LLM for routing.
@@ -187,7 +277,7 @@ class OrchestratorAgent:
 
     async def _execute_tool(self, action: Action) -> ToolResult:
         """
-        Execute a tool action
+        Execute a tool action.
 
         Args:
             action: Action with tool details
@@ -217,7 +307,7 @@ class OrchestratorAgent:
 
     def _format_tool_result(self, tool_result: ToolResult) -> str:
         """
-        Format tool result for LLM consumption
+        Format tool result for LLM consumption.
 
         Args:
             tool_result: Result from tool execution
@@ -243,7 +333,9 @@ class OrchestratorAgent:
         context: dict[str, Any],
     ) -> str:
         """
-        Generate response incorporating tool result
+        Generate response incorporating tool result.
+
+        Uses skills-based system prompt.
 
         Args:
             message: Original user message
@@ -255,15 +347,19 @@ class OrchestratorAgent:
             Generated response
         """
         try:
-            # Create system prompt
-            system_prompt = f"""You are a helpful AI assistant.
-The user asked: "{message}"
+            # Build system prompt using skills
+            base_prompt = self.build_system_prompt(context)
 
-You invoked the tool '{tool_name}' and got this result:
+            system_prompt = f"""{base_prompt}
+
+---
+
+O usuário perguntou: "{message}"
+
+Você invocou a ferramenta '{tool_name}' e obteve este resultado:
 {tool_result}
 
-Use this information to provide a helpful, conversational response to the user.
-Be natural and friendly."""
+Use esta informação para responder de forma útil e conversacional."""
 
             response: str = await self.llm_service.generate_response(
                 messages=[{"role": "user", "content": message}],
@@ -273,11 +369,13 @@ Be natural and friendly."""
         except Exception as e:
             logger.error(f"Error generating response with tool result: {e}")
             # Fallback: return tool result directly
-            return f"Here's what I found:\n{tool_result}"
+            return f"Aqui está o que encontrei:\n{tool_result}"
 
     async def _generate_direct_response(self, message: str, context: dict[str, Any]) -> str:
         """
-        Generate direct LLM response without tool
+        Generate direct LLM response without tool.
+
+        Uses skills-based system prompt.
 
         Args:
             message: User's message
@@ -287,7 +385,8 @@ Be natural and friendly."""
             Generated response
         """
         try:
-            system_prompt = "You are a helpful AI assistant. Be friendly and conversational."
+            # Build system prompt using skills
+            system_prompt = self.build_system_prompt(context)
 
             response: str = await self.llm_service.generate_response(
                 messages=[{"role": "user", "content": message}],
@@ -296,13 +395,13 @@ Be natural and friendly."""
             return response
         except Exception as e:
             logger.error(f"Error generating direct response: {e}")
-            return "I apologize, but I'm having trouble generating a response right now."
+            return "Desculpe, estou tendo dificuldades para gerar uma resposta agora."
 
     async def _generate_error_response(
         self, message: str, error: str, context: dict[str, Any]
     ) -> str:
         """
-        Generate response when tool execution failed
+        Generate response when tool execution failed.
 
         Args:
             message: Original user message
@@ -312,13 +411,13 @@ Be natural and friendly."""
         Returns:
             Error response
         """
-        return f"I apologize, but I encountered an error while trying to help you: {error}"
+        return f"Desculpe, encontrei um erro ao tentar te ajudar: {error}"
 
     def _get_fallback_error_message(self) -> str:
         """
-        Get fallback error message for critical failures
+        Get fallback error message for critical failures.
 
         Returns:
             Generic error message
         """
-        return "I apologize, but I'm experiencing technical difficulties. Please try again later."
+        return "Desculpe, estou com dificuldades técnicas. Por favor, tente novamente mais tarde."
