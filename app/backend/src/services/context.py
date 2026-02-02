@@ -73,6 +73,7 @@ def _build_preferences_context(prefs: UserPreferences) -> dict:
         "timezone": prefs.timezone,
         "language": prefs.language,
         "communication_style": prefs.communication_style.value,
+        "contact_frequency": prefs.contact_frequency.value,
         "coach_name": prefs.coach_name,
         "checkin_settings": {
             "morning_enabled": prefs.morning_checkin_enabled,
@@ -132,9 +133,11 @@ def _build_profile_context(profile: UserProfile) -> dict:
 
     return {
         "onboarding_status": profile.onboarding_status.value,
+        "onboarding_current_step": profile.onboarding_current_step,
         "onboarding_completed_at": (
             profile.onboarding_completed_at.isoformat() if profile.onboarding_completed_at else None
         ),
+        "preferred_name": profile.preferred_name,
         "vision_5_years": profile.vision_5_years,
         "vision_5_years_themes": profile.vision_5_years_themes,
         "main_obstacle": profile.main_obstacle,
