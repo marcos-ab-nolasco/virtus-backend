@@ -2,7 +2,7 @@
 
 Provides status and skip endpoints for the onboarding flow.
 The actual onboarding conversation happens through the chat endpoint
-via the OrchestratorAgent → OnboardingAgent delegation.
+via AgentRouter delegation.
 """
 
 from datetime import datetime

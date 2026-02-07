@@ -240,7 +240,7 @@ async def create_message(
 
     start_time = time.time()
     try:
-        ai_response = await _get_agent_response(
+        ai_response = await _route_agent_response(
             db, user_id, message_data.content, conversation_id, ai_messages
         )
         duration_ms = int((time.time() - start_time) * 1000)
@@ -299,7 +299,7 @@ class _ContextServiceAdapter:
         return await build_permanent_context(self._db, user_id)
 
 
-async def _get_agent_response(
+async def _route_agent_response(
     db: AsyncSession,
     user_id: UUID,
     message: str,

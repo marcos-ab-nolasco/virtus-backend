@@ -33,19 +33,24 @@ class AgentFactory:
         self._db = db_session
         self._llm = llm_service
         self._context = context_service
+        self._registries: dict[str, ToolRegistry] = {}
 
-    def _build_registry_for_onboarding(self) -> ToolRegistry:
-        registry = ToolRegistry()
-        registry.register(SaveUserProfileTool(db_session=self._db))
-        registry.register(SaveUserPreferencesTool(db_session=self._db))
-        registry.register(CompleteOnboardingStepTool(db_session=self._db))
-        return registry
+    def _get_registry(self, agent_name: str) -> ToolRegistry:
+        registry = self._registries.get(agent_name)
+        if registry is not None:
+            return registry
 
-    def _build_registry_for_advisor(self) -> ToolRegistry:
         registry = ToolRegistry()
-        registry.register(GetCurrentDateTool())
-        registry.register(GetUserPreferencesTool())
-        registry.register(GetCalendarEventsTool())
+        if agent_name == "onboarding":
+            registry.register(SaveUserProfileTool(db_session=self._db))
+            registry.register(SaveUserPreferencesTool(db_session=self._db))
+            registry.register(CompleteOnboardingStepTool(db_session=self._db))
+        elif agent_name == "advisor":
+            registry.register(GetCurrentDateTool())
+            registry.register(GetUserPreferencesTool())
+            registry.register(GetCalendarEventsTool())
+
+        self._registries[agent_name] = registry
         return registry
 
     def create_orchestrator(self) -> OrchestratorAgent:
@@ -58,14 +63,14 @@ class AgentFactory:
 
     def create_agent(self, agent_name: str):
         if agent_name == "onboarding":
-            registry = self._build_registry_for_onboarding()
+            registry = self._get_registry(agent_name)
             return OnboardingAgent(
                 llm_service=self._llm,
                 tool_registry=registry,
             )
 
         if agent_name == "advisor":
-            registry = self._build_registry_for_advisor()
+            registry = self._get_registry(agent_name)
             return AdvisorAgent(
                 llm_service=self._llm,
                 tool_registry=registry,

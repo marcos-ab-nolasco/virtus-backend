@@ -46,7 +46,7 @@ class TestChatAgentRouterIntegration:
         mock_agent_response = "Resposta via agent router"
 
         with patch(
-            "src.services.chat._get_agent_response",
+            "src.services.chat._route_agent_response",
             new_callable=AsyncMock,
             return_value=mock_agent_response,
         ) as mock_get_response:
@@ -72,7 +72,7 @@ class TestChatAgentRouterIntegration:
     ):
         """create_message should still return tuple[Message, Message] contract."""
         with patch(
-            "src.services.chat._get_agent_response",
+            "src.services.chat._route_agent_response",
             new_callable=AsyncMock,
             return_value="Resposta via agent router",
         ):
@@ -111,7 +111,7 @@ class TestChatAgentRouterIntegration:
             return "Response"
 
         with patch(
-            "src.services.chat._get_agent_response",
+            "src.services.chat._route_agent_response",
             side_effect=capture_args,
         ):
             # Send first message
@@ -136,7 +136,7 @@ class TestChatAgentRouterIntegration:
     ):
         """User with COMPLETED onboarding passes through agent router's normal flow."""
         with patch(
-            "src.services.chat._get_agent_response",
+            "src.services.chat._route_agent_response",
             new_callable=AsyncMock,
             return_value="Resposta normal do router",
         ):

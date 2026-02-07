@@ -54,7 +54,7 @@ class TestOnboardingChatE2E:
         assert profile.onboarding_status == OnboardingStatus.NOT_STARTED
 
         with patch(
-            "src.services.chat._get_agent_response",
+            "src.services.chat._route_agent_response",
             new_callable=AsyncMock,
             return_value="Olá! Eu sou o Virtus, seu assistente pessoal. Vamos começar?",
         ):
@@ -88,7 +88,7 @@ class TestOnboardingChatE2E:
         await db_session.commit()
 
         with patch(
-            "src.services.chat._get_agent_response",
+            "src.services.chat._route_agent_response",
             new_callable=AsyncMock,
             return_value="Claro! Posso te ajudar com sua agenda.",
         ):
