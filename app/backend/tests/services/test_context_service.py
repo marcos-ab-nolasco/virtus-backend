@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models.user import User
 from src.db.models.user_preferences import ContactFrequency
-from src.db.models.user_profile import OnboardingStatus
 from src.services.context import build_permanent_context
 
 
@@ -54,9 +53,7 @@ async def test_build_permanent_context_includes_contact_frequency(
 
 
 @pytest.mark.asyncio
-async def test_build_permanent_context_includes_profile(
-    db_session: AsyncSession, test_user: User
-):
+async def test_build_permanent_context_includes_profile(db_session: AsyncSession, test_user: User):
     """Test that context includes user profile."""
     context = await build_permanent_context(db_session, test_user.id)
 

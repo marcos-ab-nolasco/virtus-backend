@@ -1,7 +1,6 @@
 """Tests for OnboardingService.
 
-Issue 3.6: Tests for onboarding state persistence service.
-Following TDD - RED phase: write failing tests first.
+Tests for onboarding state persistence service with 7-step flow.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -44,15 +43,15 @@ class TestOnboardingServiceStart:
         assert before <= profile.onboarding_started_at <= after
 
     @pytest.mark.asyncio
-    async def test_start_onboarding_sets_current_step_to_welcome(
+    async def test_start_onboarding_sets_current_step_to_intro(
         self, db_session: AsyncSession, test_user: User
     ):
-        """start_onboarding should set current_step to 'welcome'."""
+        """start_onboarding should set current_step to 'intro'."""
         from src.services.onboarding import start_onboarding
 
         profile = await start_onboarding(db_session, test_user.id)
 
-        assert profile.onboarding_current_step == "welcome"
+        assert profile.onboarding_current_step == "intro"
 
     @pytest.mark.asyncio
     async def test_start_onboarding_initializes_empty_data(
@@ -119,7 +118,7 @@ class TestOnboardingServiceGetState:
         state = await get_onboarding_state(db_session, test_user.id)
 
         assert state["status"] == OnboardingStatus.IN_PROGRESS.value
-        assert state["current_step"] == "welcome"
+        assert state["current_step"] == "intro"
         assert "started_at" in state
         assert "data" in state
 
@@ -221,44 +220,70 @@ class TestOnboardingServiceAdvanceStep:
 
     @pytest.mark.asyncio
     async def test_advance_step_moves_to_next_step(self, db_session: AsyncSession, test_user: User):
-        """advance_step should move to the next step in sequence."""
+        """advance_step should move through the 7-step sequence."""
         from src.services.onboarding import advance_step, start_onboarding
 
         await start_onboarding(db_session, test_user.id)
 
-        # welcome -> name
+        # intro -> name
         profile = await advance_step(db_session, test_user.id)
         assert profile.onboarding_current_step == "name"
 
-        # name -> goals
+        # name -> frequency
+        profile = await advance_step(db_session, test_user.id)
+        assert profile.onboarding_current_step == "frequency"
+
+        # frequency -> routine
+        profile = await advance_step(db_session, test_user.id)
+        assert profile.onboarding_current_step == "routine"
+
+        # routine -> goals
         profile = await advance_step(db_session, test_user.id)
         assert profile.onboarding_current_step == "goals"
 
-        # goals -> preferences
+        # goals -> calendar
         profile = await advance_step(db_session, test_user.id)
-        assert profile.onboarding_current_step == "preferences"
+        assert profile.onboarding_current_step == "calendar"
 
-        # preferences -> conclusion
+        # calendar -> closing
         profile = await advance_step(db_session, test_user.id)
-        assert profile.onboarding_current_step == "conclusion"
+        assert profile.onboarding_current_step == "closing"
 
     @pytest.mark.asyncio
-    async def test_advance_step_from_conclusion_completes_onboarding(
+    async def test_advance_step_from_closing_completes_onboarding(
         self, db_session: AsyncSession, test_user: User
     ):
-        """advance_step from conclusion should complete onboarding."""
+        """advance_step from closing should complete onboarding."""
         from src.services.onboarding import advance_step, start_onboarding
 
         await start_onboarding(db_session, test_user.id)
 
-        # Advance through all steps to conclusion
-        for _ in range(4):  # welcome -> name -> goals -> preferences -> conclusion
+        # Advance through all 7 steps: intro->name->freq->routine->goals->calendar->closing
+        for _ in range(6):
             await advance_step(db_session, test_user.id)
 
-        # From conclusion, should complete
+        # From closing, should complete
         profile = await advance_step(db_session, test_user.id)
         assert profile.onboarding_status == OnboardingStatus.COMPLETED
         assert profile.onboarding_completed_at is not None
+
+
+class TestOnboardingServiceStepSequence:
+    """Test that onboarding steps align with the OnboardingAgent."""
+
+    def test_onboarding_steps_match_agent_sequence(self):
+        """ONBOARDING_STEPS should match the OnboardingAgent's 7-step sequence."""
+        from src.agents.onboarding import ONBOARDING_STEPS as AGENT_STEPS
+        from src.services.onboarding import ONBOARDING_STEPS as SERVICE_STEPS
+
+        assert SERVICE_STEPS == AGENT_STEPS
+
+    def test_step_progress_covers_all_steps(self):
+        """STEP_PROGRESS should have an entry for every step."""
+        from src.services.onboarding import ONBOARDING_STEPS, STEP_PROGRESS
+
+        for step in ONBOARDING_STEPS:
+            assert step in STEP_PROGRESS, f"Step '{step}' missing from STEP_PROGRESS"
 
 
 class TestOnboardingServiceComplete:

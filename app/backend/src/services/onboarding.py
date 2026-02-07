@@ -13,16 +13,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models.user_profile import OnboardingStatus, UserProfile
 
-# Onboarding step sequence
-ONBOARDING_STEPS = ["welcome", "name", "goals", "preferences", "conclusion"]
+# Onboarding step sequence (matches OnboardingAgent's 7-step flow)
+ONBOARDING_STEPS = ["intro", "name", "frequency", "routine", "goals", "calendar", "closing"]
 
 # Step to progress percentage mapping
 STEP_PROGRESS = {
-    "welcome": 0,
-    "name": 20,
-    "goals": 40,
-    "preferences": 60,
-    "conclusion": 80,
+    "intro": 0,
+    "name": 14,
+    "frequency": 28,
+    "routine": 42,
+    "goals": 57,
+    "calendar": 71,
+    "closing": 85,
 }
 
 
@@ -55,7 +57,7 @@ async def start_onboarding(db: AsyncSession, user_id: uuid.UUID) -> UserProfile:
     """Start the onboarding process for a user.
 
     Sets status to IN_PROGRESS, sets started_at timestamp,
-    sets current_step to 'welcome', and initializes empty onboarding_data.
+    sets current_step to 'intro', and initializes empty onboarding_data.
 
     Args:
         db: Database session
@@ -77,7 +79,7 @@ async def start_onboarding(db: AsyncSession, user_id: uuid.UUID) -> UserProfile:
 
     profile.onboarding_status = OnboardingStatus.IN_PROGRESS
     profile.onboarding_started_at = datetime.now(UTC)
-    profile.onboarding_current_step = "welcome"
+    profile.onboarding_current_step = "intro"
     profile.onboarding_data = {}
 
     await db.commit()
@@ -197,7 +199,7 @@ async def advance_step(db: AsyncSession, user_id: uuid.UUID) -> UserProfile:
     if current_step is None:
         # Not started, set to first step
         profile.onboarding_current_step = ONBOARDING_STEPS[0]
-    elif current_step == "conclusion":
+    elif current_step == "closing":
         # At conclusion, complete onboarding
         return await complete_onboarding(db, user_id)
     else:

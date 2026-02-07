@@ -279,9 +279,7 @@ class TestOnboardingProcess:
     @pytest.mark.asyncio
     async def test_process_handles_errors_gracefully(self) -> None:
         """Process should handle errors gracefully."""
-        self.mock_llm.generate_response_with_tools = AsyncMock(
-            side_effect=Exception("LLM Error")
-        )
+        self.mock_llm.generate_response_with_tools = AsyncMock(side_effect=Exception("LLM Error"))
 
         context = get_onboarding_context(step="intro")
         response = await self.agent.process(

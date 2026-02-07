@@ -281,7 +281,7 @@ Quando o usuário responder, extraia o nome preferido e chame:
 
 Se o usuário disser "tanto faz" ou similar, use o primeiro nome de "{user_name}".
 """,
-            "frequency": f"""
+            "frequency": """
 ## Etapa FREQUENCY
 
 Pergunte a frequência de contato preferida.
@@ -297,7 +297,7 @@ Quando o usuário escolher, chame:
 1. `save_user_preferences` com contact_frequency
 2. `complete_onboarding_step` com step: "frequency"
 """,
-            "routine": f"""
+            "routine": """
 ## Etapa ROUTINE
 
 Pergunte sobre:
@@ -311,7 +311,7 @@ Quando o usuário responder, chame:
 
 Se o usuário não souber o timezone, use UTC como default.
 """,
-            "goals": f"""
+            "goals": """
 ## Etapa GOALS
 
 Pergunte sobre o momento atual e objetivos do usuário:
@@ -328,7 +328,7 @@ Quando o usuário responder, chame:
 
 Aceite respostas parciais - não force o usuário a responder tudo.
 """,
-            "calendar": f"""
+            "calendar": """
 ## Etapa CALENDAR
 
 Ofereça a integração de calendário (opcional).
@@ -338,7 +338,7 @@ Se o usuário quiser pular, aceite sem insistir.
 
 Chame `complete_onboarding_step` com step: "calendar" após a decisão.
 """,
-            "closing": f"""
+            "closing": """
 ## Etapa CLOSING
 
 É a última etapa. Finalize o onboarding:
