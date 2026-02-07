@@ -198,8 +198,14 @@ class BaseAgent(ABC):
         # Obter definições de tools
         tool_definitions = self._get_tool_definitions()
 
-        # Preparar mensagens
-        messages = [*conversation_history, {"role": "user", "content": message}]
+        # Preparar mensagens (evitar duplicar a ultima mensagem do usuario)
+        messages = list(conversation_history)
+        if (
+            not messages
+            or messages[-1].get("role") != "user"
+            or messages[-1].get("content") != message
+        ):
+            messages.append({"role": "user", "content": message})
 
         # Chamar LLM com tools
         result = await self.llm.generate_response_with_tools(

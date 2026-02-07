@@ -421,3 +421,42 @@ class TestProcess:
         assert response.response == "Hello! How can I help you?"
         assert response.tool_calls is None
         assert response.metadata["finish_reason"] == "stop"
+
+    @pytest.mark.asyncio
+    async def test_process_deduplicates_latest_user_message(self, tmp_path: Path) -> None:
+        """Process deve evitar duplicar a ultima mensagem do usuario."""
+        skills_dir = tmp_path / "skills"
+        skill_dir = skills_dir / "test_skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "instructions.md").write_text("# Test")
+
+        captured: dict[str, Any] = {}
+
+        async def capture_call(*, messages, system_prompt, tools):
+            captured["messages"] = messages
+            return {
+                "content": "Ok",
+                "tool_calls": None,
+                "finish_reason": "stop",
+            }
+
+        self.mock_llm.generate_response_with_tools = AsyncMock(side_effect=capture_call)
+
+        agent = ConcreteAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.mock_registry,
+            skills_path=skills_dir,
+        )
+
+        history = [
+            {"role": "assistant", "content": "Oi!"},
+            {"role": "user", "content": "Olá"},
+        ]
+
+        await agent.process(
+            message="Olá",
+            user_context={"user_id": "123"},
+            conversation_history=history,
+        )
+
+        assert captured["messages"] == history
