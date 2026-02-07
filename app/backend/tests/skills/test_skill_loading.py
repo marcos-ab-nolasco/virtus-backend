@@ -8,8 +8,6 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
 
-import pytest
-
 from src.agents.base import BaseAgent
 from src.services.ai.base import BaseAIService
 from src.tools.registry import ToolRegistry
