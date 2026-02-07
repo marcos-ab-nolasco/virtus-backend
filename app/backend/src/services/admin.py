@@ -10,7 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.dependencies import _get_user_by_id
 from src.db.models.user import User
-from src.db.models.user_preferences import CommunicationStyle, UserPreferences, WeekDay
+from src.db.models.user_preferences import (
+    CommunicationStyle,
+    ContactFrequency,
+    UserPreferences,
+    WeekDay,
+)
 from src.db.models.user_profile import OnboardingStatus, UserProfile
 from src.services import preferences as preferences_service
 from src.services import profile as profile_service
@@ -29,6 +34,7 @@ _PREFERENCES_DEFAULTS = {
     "language": "pt-BR",
     "communication_style": CommunicationStyle.DIRECT,
     "coach_name": "Virtus",
+    "contact_frequency": ContactFrequency.SOMETIMES,
 }
 
 _PROFILE_RESET_FIELDS = [

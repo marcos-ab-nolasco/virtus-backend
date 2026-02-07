@@ -6,7 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models.user import User
-from src.db.models.user_preferences import CommunicationStyle, UserPreferences, WeekDay
+from src.db.models.user_preferences import (
+    CommunicationStyle,
+    ContactFrequency,
+    UserPreferences,
+    WeekDay,
+)
 from src.db.models.user_profile import OnboardingStatus, UserProfile
 
 
@@ -129,6 +134,7 @@ async def test_admin_can_reset_onboarding(
     preferences.timezone = "America/Sao_Paulo"
     preferences.weekly_review_day = WeekDay.MONDAY
     preferences.communication_style = CommunicationStyle.GENTLE
+    preferences.contact_frequency = ContactFrequency.FREQUENTLY
 
     await db_session.commit()
 
@@ -159,6 +165,7 @@ async def test_admin_can_reset_onboarding(
     assert preferences.timezone == "UTC"
     assert preferences.weekly_review_day == WeekDay.SUNDAY
     assert preferences.communication_style == CommunicationStyle.DIRECT
+    assert preferences.contact_frequency == ContactFrequency.SOMETIMES
 
 
 @pytest.mark.asyncio
