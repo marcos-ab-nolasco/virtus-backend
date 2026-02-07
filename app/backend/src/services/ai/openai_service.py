@@ -257,6 +257,8 @@ class OpenAIService(BaseAIService):
             entry = {"role": msg["role"], "content": msg["content"]}
             if msg.get("role") == "tool" and "tool_call_id" in msg:
                 entry["tool_call_id"] = msg["tool_call_id"]
+            if msg.get("role") == "assistant" and "tool_calls" in msg:
+                entry["tool_calls"] = msg["tool_calls"]
             payload.append(entry)
 
         return payload

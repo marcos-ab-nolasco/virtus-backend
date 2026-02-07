@@ -517,7 +517,10 @@ class TestProcess:
         assert self.mock_llm.generate_response_with_tools.call_count == 2
 
         second_call = calls[1]["messages"]
+        assistant_calls = [msg for msg in second_call if msg.get("role") == "assistant"]
         tool_messages = [msg for msg in second_call if msg.get("role") == "tool"]
+
+        assert assistant_calls, "Expected assistant tool-call message in second call"
         assert tool_messages, "Expected tool result messages in second call"
         assert tool_messages[-1].get("tool_call_id") == "call_1"
         assert "ok" in (tool_messages[-1].get("content") or "")

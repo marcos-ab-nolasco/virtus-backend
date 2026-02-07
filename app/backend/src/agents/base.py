@@ -241,6 +241,7 @@ class BaseAgent(ABC):
             )
 
         executor = ToolExecutor(self.tools)
+        assistant_tool_call = {"role": "assistant", "content": None, "tool_calls": tool_calls}
         tool_messages: list[dict[str, Any]] = []
         for tool_call in tool_calls:
             tool_name = tool_call.get("name")
@@ -263,7 +264,7 @@ class BaseAgent(ABC):
             tool_messages.append(tool_message)
 
         followup = await self.llm.generate_response_with_tools(
-            messages=[*messages, *tool_messages],
+            messages=[*messages, assistant_tool_call, *tool_messages],
             system_prompt=system_prompt,
             tools=[],
         )
