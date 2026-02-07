@@ -16,7 +16,7 @@ import pytest
 
 from src.agents.base import AgentResponse, BaseAgent
 from src.services.ai.base import BaseAIService
-from src.tools.base import BaseTool
+from src.tools.base import BaseTool, ToolResult
 from src.tools.registry import ToolRegistry
 
 
@@ -34,6 +34,17 @@ class ConcreteAgent(BaseAgent):
     @property
     def available_tools(self) -> list[str]:
         return ["test_tool"]
+
+
+class DummyTool(BaseTool):
+    """Tool simples para testes do loop de tools."""
+
+    name = "test_tool"
+    description = "Dummy tool"
+    parameters = {"type": "object", "properties": {}, "required": []}
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        return ToolResult(success=True, data={"value": "ok"})
 
 
 class TestAgentAbstractProperties:
@@ -460,3 +471,53 @@ class TestProcess:
         )
 
         assert captured["messages"] == history
+
+    @pytest.mark.asyncio
+    async def test_process_runs_tool_loop_and_calls_llm_twice(self, tmp_path: Path) -> None:
+        """Process deve executar tools e gerar resposta final."""
+        skills_dir = tmp_path / "skills"
+        skill_dir = skills_dir / "test_skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "instructions.md").write_text("# Test")
+
+        registry = ToolRegistry()
+        registry.register(DummyTool())
+
+        agent = ConcreteAgent(
+            llm_service=self.mock_llm,
+            tool_registry=registry,
+            skills_path=skills_dir,
+        )
+
+        calls: list[dict[str, Any]] = []
+
+        async def side_effect(*, messages, system_prompt, tools):
+            calls.append({"messages": messages, "tools": tools})
+            if len(calls) == 1:
+                return {
+                    "content": None,
+                    "tool_calls": [{"id": "call_1", "name": "test_tool", "arguments": {}}],
+                    "finish_reason": "tool_calls",
+                }
+            return {
+                "content": "Resultado final",
+                "tool_calls": None,
+                "finish_reason": "stop",
+            }
+
+        self.mock_llm.generate_response_with_tools = AsyncMock(side_effect=side_effect)
+
+        response = await agent.process(
+            message="Teste",
+            user_context={"user_id": "123"},
+            conversation_history=[],
+        )
+
+        assert response.response == "Resultado final"
+        assert self.mock_llm.generate_response_with_tools.call_count == 2
+
+        second_call = calls[1]["messages"]
+        tool_messages = [msg for msg in second_call if msg.get("role") == "tool"]
+        assert tool_messages, "Expected tool result messages in second call"
+        assert tool_messages[-1].get("tool_call_id") == "call_1"
+        assert "ok" in (tool_messages[-1].get("content") or "")

@@ -4,10 +4,13 @@ Base Agent - Classe base abstrata para todos os agentes
 Define a interface comum que todos os agentes do sistema devem implementar.
 """
 
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from src.tools.executor import ToolExecutionError, ToolExecutor
 
 
 @dataclass
@@ -175,6 +178,19 @@ class BaseAgent(ABC):
 
         return "\n\n".join(parts)
 
+    def _build_messages(
+        self, conversation_history: list[dict[str, Any]], message: str
+    ) -> list[dict[str, Any]]:
+        """Build message list with deduplication of the latest user message."""
+        messages = list(conversation_history)
+        if (
+            not messages
+            or messages[-1].get("role") != "user"
+            or messages[-1].get("content") != message
+        ):
+            messages.append({"role": "user", "content": message})
+        return messages
+
     async def process(
         self,
         message: str,
@@ -192,31 +208,71 @@ class BaseAgent(ABC):
         Returns:
             AgentResponse com resposta e/ou tool calls
         """
-        # Preparar system prompt
         system_prompt = self.build_system_prompt(user_context)
-
-        # Obter definições de tools
         tool_definitions = self._get_tool_definitions()
+        messages = self._build_messages(conversation_history, message)
 
-        # Preparar mensagens (evitar duplicar a ultima mensagem do usuario)
-        messages = list(conversation_history)
-        if (
-            not messages
-            or messages[-1].get("role") != "user"
-            or messages[-1].get("content") != message
-        ):
-            messages.append({"role": "user", "content": message})
+        return await self._run_tool_loop(
+            messages=messages,
+            system_prompt=system_prompt,
+            tool_definitions=tool_definitions,
+        )
 
-        # Chamar LLM com tools
+    async def _run_tool_loop(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        system_prompt: str,
+        tool_definitions: list[dict[str, Any]],
+    ) -> AgentResponse:
+        """Execute tool-calling loop and return final response."""
         result = await self.llm.generate_response_with_tools(
             messages=messages,
             system_prompt=system_prompt,
             tools=tool_definitions,
         )
 
-        # Return as AgentResponse
+        tool_calls = result.get("tool_calls")
+        if not tool_calls:
+            return AgentResponse(
+                response=result.get("content"),
+                tool_calls=None,
+                metadata={"finish_reason": result.get("finish_reason")},
+            )
+
+        executor = ToolExecutor(self.tools)
+        tool_messages: list[dict[str, Any]] = []
+        for tool_call in tool_calls:
+            tool_name = tool_call.get("name")
+            tool_args = tool_call.get("arguments", {})
+            tool_call_id = tool_call.get("id")
+
+            if not tool_name:
+                payload = {"success": False, "data": None, "error": "Missing tool name"}
+            else:
+                try:
+                    tool_result = await executor.execute(tool_name, tool_args)
+                    payload = tool_result.to_dict()
+                except ToolExecutionError as exc:
+                    payload = {"success": False, "data": None, "error": str(exc)}
+
+            content = json.dumps(payload, ensure_ascii=False)
+            tool_message = {"role": "tool", "content": content}
+            if tool_call_id:
+                tool_message["tool_call_id"] = tool_call_id
+            tool_messages.append(tool_message)
+
+        followup = await self.llm.generate_response_with_tools(
+            messages=[*messages, *tool_messages],
+            system_prompt=system_prompt,
+            tools=[],
+        )
+
         return AgentResponse(
-            response=result.get("content"),
-            tool_calls=result.get("tool_calls"),
-            metadata={"finish_reason": result.get("finish_reason")},
+            response=followup.get("content"),
+            tool_calls=None,
+            metadata={
+                "finish_reason": followup.get("finish_reason"),
+                "tool_calls": tool_calls,
+            },
         )

@@ -166,29 +166,25 @@ class OnboardingAgent(BaseAgent):
             )
 
             # Prepare messages for LLM
-            messages = [*conversation_history, {"role": "user", "content": message}]
+            messages = self._build_messages(conversation_history, message)
 
             # Get tool definitions
             tool_definitions = self._get_tool_definitions()
 
-            # Call LLM with tools
-            result = await self.llm.generate_response_with_tools(
+            response = await self._run_tool_loop(
                 messages=messages,
                 system_prompt=system_prompt,
-                tools=tool_definitions,
+                tool_definitions=tool_definitions,
             )
 
-            logger.debug(f"LLM result: {result}")
-
-            return AgentResponse(
-                response=result.get("content"),
-                tool_calls=result.get("tool_calls"),
-                metadata={
-                    "finish_reason": result.get("finish_reason"),
+            response.metadata.update(
+                {
                     "current_step": current_step,
                     "next_step": self.get_next_step(current_step),
-                },
+                }
             )
+
+            return response
 
         except Exception as e:
             logger.error(f"Error in onboarding process: {e}", exc_info=True)

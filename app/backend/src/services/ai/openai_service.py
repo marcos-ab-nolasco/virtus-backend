@@ -253,6 +253,10 @@ class OpenAIService(BaseAIService):
         if system_prompt:
             payload.append({"role": "system", "content": system_prompt})
 
-        payload.extend({"role": msg["role"], "content": msg["content"]} for msg in messages)
+        for msg in messages:
+            entry = {"role": msg["role"], "content": msg["content"]}
+            if msg.get("role") == "tool" and "tool_call_id" in msg:
+                entry["tool_call_id"] = msg["tool_call_id"]
+            payload.append(entry)
 
         return payload

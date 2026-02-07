@@ -14,6 +14,7 @@ import pytest
 from src.agents.base import AgentResponse, BaseAgent
 from src.agents.onboarding import ONBOARDING_STEPS, OnboardingAgent
 from src.services.ai.base import BaseAIService
+from src.tools.base import ToolResult
 from src.tools.registry import ToolRegistry
 
 
@@ -252,17 +253,29 @@ class TestOnboardingProcess:
     @pytest.mark.asyncio
     async def test_process_handles_tool_calls(self) -> None:
         """Process should handle tool calls from LLM."""
+        tool = AsyncMock()
+        tool.execute = AsyncMock(return_value=ToolResult(success=True, data={"saved": True}))
+        self.mock_registry.get_tool.return_value = tool
+
         self.mock_llm.generate_response_with_tools = AsyncMock(
-            return_value={
-                "content": "Vou salvar seu nome preferido.",
-                "tool_calls": [
-                    {
-                        "name": "save_user_profile",
-                        "arguments": {"user_id": "test", "preferred_name": "Zé"},
-                    }
-                ],
-                "finish_reason": "tool_calls",
-            }
+            side_effect=[
+                {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "name": "save_user_profile",
+                            "arguments": {"user_id": "test", "preferred_name": "Zé"},
+                        }
+                    ],
+                    "finish_reason": "tool_calls",
+                },
+                {
+                    "content": "Vou salvar seu nome preferido.",
+                    "tool_calls": None,
+                    "finish_reason": "stop",
+                },
+            ]
         )
 
         context = get_onboarding_context(step="name")
@@ -272,9 +285,9 @@ class TestOnboardingProcess:
             conversation_history=[],
         )
 
-        assert response.tool_calls is not None
-        assert len(response.tool_calls) == 1
-        assert response.tool_calls[0]["name"] == "save_user_profile"
+        assert response.response == "Vou salvar seu nome preferido."
+        assert response.tool_calls is None
+        assert self.mock_llm.generate_response_with_tools.call_count == 2
 
     @pytest.mark.asyncio
     async def test_process_handles_errors_gracefully(self) -> None:
