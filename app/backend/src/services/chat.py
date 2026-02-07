@@ -7,13 +7,12 @@ from fastapi import HTTPException, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.agents.orchestrator import OrchestratorAgent
 from src.core.cache.decorator import redis_cache_decorator
 from src.db.models import Conversation, Message
 from src.schemas.chat import ConversationCreate, ConversationUpdate, MessageCreate
+from src.services.agent_factory import AgentFactory
+from src.services.agent_router import AgentRouter
 from src.services.ai import get_ai_service
-from src.tools.executor import ToolExecutor
-from src.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -241,7 +240,7 @@ async def create_message(
 
     start_time = time.time()
     try:
-        ai_response = await _get_orchestrator_response(
+        ai_response = await _get_agent_response(
             db, user_id, message_data.content, conversation_id, ai_messages
         )
         duration_ms = int((time.time() - start_time) * 1000)
@@ -300,14 +299,14 @@ class _ContextServiceAdapter:
         return await build_permanent_context(self._db, user_id)
 
 
-async def _get_orchestrator_response(
+async def _get_agent_response(
     db: AsyncSession,
     user_id: UUID,
     message: str,
     conversation_id: UUID,
     conversation_history: list[dict[str, str]],
 ) -> str:
-    """Route a message through the OrchestratorAgent.
+    """Route a message through the AgentRouter.
 
     Args:
         db: Database session
@@ -319,28 +318,16 @@ async def _get_orchestrator_response(
     Returns:
         Response string from the orchestrator
     """
-    from src.tools.onboarding_tools import (
-        CompleteOnboardingStepTool,
-        SaveUserPreferencesTool,
-        SaveUserProfileTool,
-    )
-
     ai_service = get_ai_service("openai")
-    registry = ToolRegistry()
-    registry.register(SaveUserProfileTool(db_session=db))
-    registry.register(SaveUserPreferencesTool(db_session=db))
-    registry.register(CompleteOnboardingStepTool(db_session=db))
-    executor = ToolExecutor(registry)
-
     context_adapter = _ContextServiceAdapter(db)
-    orchestrator = OrchestratorAgent(
+    factory = AgentFactory(
+        db_session=db,
         llm_service=ai_service,
-        tool_registry=registry,
-        tool_executor=executor,
         context_service=context_adapter,
     )
+    router = AgentRouter(agent_factory=factory)
 
-    return await orchestrator.process_message(
+    return await router.route(
         user_id=user_id,
         message=message,
         conversation_id=conversation_id,

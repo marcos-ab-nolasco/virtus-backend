@@ -198,7 +198,7 @@ async def test_create_message_generates_ai_response(
 ) -> None:
     """Creating a message should persist user + assistant responses via the orchestrator."""
     mocker.patch(
-        "src.services.chat._get_orchestrator_response",
+        "src.services.chat._get_agent_response",
         return_value="AI response",
     )
 
