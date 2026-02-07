@@ -292,6 +292,36 @@ class TestOnboardingProcess:
         assert response.response is not None
         assert "error" in response.metadata
 
+    @pytest.mark.asyncio
+    async def test_process_does_not_duplicate_last_user_message(self) -> None:
+        """Process should not duplicate the latest user message already in history."""
+        captured: dict[str, Any] = {}
+
+        async def capture_call(*, messages, system_prompt, tools):
+            captured["messages"] = messages
+            return {
+                "content": "Ok",
+                "tool_calls": None,
+                "finish_reason": "stop",
+            }
+
+        self.mock_llm.generate_response_with_tools = AsyncMock(side_effect=capture_call)
+
+        context = get_onboarding_context(step="intro")
+        history = [
+            {"role": "assistant", "content": "Olá!"},
+            {"role": "user", "content": "Oi"},
+        ]
+
+        await self.agent.process(
+            message="Oi",
+            user_context=context,
+            conversation_history=history,
+        )
+
+        assert "messages" in captured
+        assert captured["messages"] == history
+
 
 class TestOnboardingStepInstructions:
     """Test step-specific instruction generation."""

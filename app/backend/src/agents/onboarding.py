@@ -165,8 +165,14 @@ class OnboardingAgent(BaseAgent):
                 user_context=user_context,
             )
 
-            # Prepare messages for LLM
-            messages = [*conversation_history, {"role": "user", "content": message}]
+            # Prepare messages for LLM (avoid duplicating the latest user message)
+            messages = list(conversation_history)
+            if (
+                not messages
+                or messages[-1].get("role") != "user"
+                or messages[-1].get("content") != message
+            ):
+                messages.append({"role": "user", "content": message})
 
             # Get tool definitions
             tool_definitions = self._get_tool_definitions()
