@@ -5,13 +5,13 @@ Tests the new skills-based architecture and onboarding detection.
 """
 
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
 
 from src.agents.actions import Action, ActionType
-from src.agents.base import BaseAgent
+from src.agents.base import AgentResponse, BaseAgent
 from src.agents.orchestrator import OrchestratorAgent
 from src.tools.base import ToolResult
 from src.tools.examples.get_current_date import GetCurrentDateTool
@@ -130,36 +130,31 @@ class TestOrchestratorOnboardingDetection:
         assert self.orchestrator.should_route_to_onboarding(context) is True
 
     @pytest.mark.asyncio
-    async def test_process_message_returns_onboarding_message_when_needed(self):
-        """Should return onboarding message when user hasn't completed onboarding."""
+    async def test_process_message_delegates_to_onboarding_agent_when_needed(self):
+        """Should delegate to OnboardingAgent when user hasn't completed onboarding."""
         self.mock_context.build_permanent_context = AsyncMock(
             return_value=get_incomplete_onboarding_context()
         )
 
-        response = await self.orchestrator.process_message(
-            user_id=uuid4(),
-            message="Hello",
-            conversation_id=uuid4(),
+        mock_agent_response = AgentResponse(
+            response="Olá! Eu sou o Virtus. Vamos começar?",
+            tool_calls=None,
         )
 
-        assert isinstance(response, str)
-        assert "perguntas" in response.lower() or "conhecer" in response.lower()
-        assert "vamos" in response.lower()
+        with patch("src.agents.orchestrator.OnboardingAgent") as MockOnboardingAgent:
+            mock_instance = AsyncMock()
+            mock_instance.process = AsyncMock(return_value=mock_agent_response)
+            MockOnboardingAgent.return_value = mock_instance
 
-    @pytest.mark.asyncio
-    async def test_process_message_uses_preferred_name_in_onboarding(self):
-        """Should use preferred_name in onboarding message if available."""
-        context = get_incomplete_onboarding_context()
-        context["profile"]["preferred_name"] = "Zé"
-        self.mock_context.build_permanent_context = AsyncMock(return_value=context)
+            response = await self.orchestrator.process_message(
+                user_id=uuid4(),
+                message="Hello",
+                conversation_id=uuid4(),
+            )
 
-        response = await self.orchestrator.process_message(
-            user_id=uuid4(),
-            message="Hello",
-            conversation_id=uuid4(),
-        )
-
-        assert "Zé" in response
+            assert isinstance(response, str)
+            assert response == "Olá! Eu sou o Virtus. Vamos começar?"
+            mock_instance.process.assert_awaited_once()
 
 
 class TestOrchestratorDirectResponse:
@@ -296,9 +291,7 @@ class TestOrchestratorErrorHandling:
     @pytest.mark.asyncio
     async def test_handles_context_failure(self):
         """Should handle context building failure."""
-        self.mock_context.build_permanent_context = AsyncMock(
-            side_effect=Exception("DB error")
-        )
+        self.mock_context.build_permanent_context = AsyncMock(side_effect=Exception("DB error"))
 
         response = await self.orchestrator.process_message(
             user_id=uuid4(),
@@ -378,3 +371,143 @@ class TestOrchestratorActions:
         assert isinstance(result, ToolResult)
         assert result.success is False
         assert result.error is not None
+
+
+class TestOrchestratorDelegatesToOnboarding:
+    """Test orchestrator delegation to OnboardingAgent."""
+
+    def setup_method(self):
+        """Setup orchestrator with mocked dependencies."""
+        self.registry = ToolRegistry()
+        self.executor = ToolExecutor(self.registry)
+        self.mock_llm = AsyncMock()
+        self.mock_context = AsyncMock()
+
+        self.orchestrator = OrchestratorAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.registry,
+            tool_executor=self.executor,
+            context_service=self.mock_context,
+        )
+
+    @pytest.mark.asyncio
+    async def test_onboarding_needed_calls_onboarding_agent_process(self):
+        """When onboarding_status != COMPLETED, should call OnboardingAgent.process()."""
+        self.mock_context.build_permanent_context = AsyncMock(
+            return_value=get_incomplete_onboarding_context()
+        )
+
+        mock_agent_response = AgentResponse(
+            response="Bem-vindo ao Virtus!",
+            tool_calls=None,
+        )
+
+        with patch("src.agents.orchestrator.OnboardingAgent") as MockOnboardingAgent:
+            mock_instance = AsyncMock()
+            mock_instance.process = AsyncMock(return_value=mock_agent_response)
+            MockOnboardingAgent.return_value = mock_instance
+
+            response = await self.orchestrator.process_message(
+                user_id=uuid4(),
+                message="Oi",
+                conversation_id=uuid4(),
+            )
+
+            mock_instance.process.assert_awaited_once()
+            assert response == "Bem-vindo ao Virtus!"
+
+    @pytest.mark.asyncio
+    async def test_onboarding_delegation_executes_tool_calls(self):
+        """When OnboardingAgent returns tool_calls, orchestrator should execute them."""
+        self.mock_context.build_permanent_context = AsyncMock(
+            return_value=get_incomplete_onboarding_context()
+        )
+
+        mock_agent_response = AgentResponse(
+            response="Prazer, João!",
+            tool_calls=[
+                {"name": "save_user_profile", "arguments": {"preferred_name": "João"}},
+                {"name": "complete_onboarding_step", "arguments": {"step": "name"}},
+            ],
+        )
+
+        with patch("src.agents.orchestrator.OnboardingAgent") as MockOnboardingAgent:
+            mock_instance = AsyncMock()
+            mock_instance.process = AsyncMock(return_value=mock_agent_response)
+            MockOnboardingAgent.return_value = mock_instance
+
+            # Mock tool executor
+            self.orchestrator.tool_executor.execute = AsyncMock(
+                return_value=ToolResult(success=True, data={})
+            )
+
+            response = await self.orchestrator.process_message(
+                user_id=uuid4(),
+                message="Me chama de João",
+                conversation_id=uuid4(),
+            )
+
+            assert response == "Prazer, João!"
+            assert self.orchestrator.tool_executor.execute.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_onboarding_delegation_returns_text_response(self):
+        """Response from OnboardingAgent is returned as string."""
+        self.mock_context.build_permanent_context = AsyncMock(
+            return_value=get_incomplete_onboarding_context()
+        )
+
+        mock_agent_response = AgentResponse(
+            response="Vamos falar sobre frequência de contato.",
+            tool_calls=None,
+        )
+
+        with patch("src.agents.orchestrator.OnboardingAgent") as MockOnboardingAgent:
+            mock_instance = AsyncMock()
+            mock_instance.process = AsyncMock(return_value=mock_agent_response)
+            MockOnboardingAgent.return_value = mock_instance
+
+            response = await self.orchestrator.process_message(
+                user_id=uuid4(),
+                message="Ok, vamos lá",
+                conversation_id=uuid4(),
+            )
+
+            assert isinstance(response, str)
+            assert "frequência" in response.lower()
+
+    @pytest.mark.asyncio
+    async def test_process_message_accepts_conversation_history(self):
+        """Orchestrator should accept and propagate conversation_history."""
+        self.mock_context.build_permanent_context = AsyncMock(
+            return_value=get_incomplete_onboarding_context()
+        )
+
+        mock_agent_response = AgentResponse(
+            response="Continuando de onde paramos...",
+            tool_calls=None,
+        )
+
+        history = [
+            {"role": "assistant", "content": "Olá!"},
+            {"role": "user", "content": "Oi"},
+        ]
+
+        with patch("src.agents.orchestrator.OnboardingAgent") as MockOnboardingAgent:
+            mock_instance = AsyncMock()
+            mock_instance.process = AsyncMock(return_value=mock_agent_response)
+            MockOnboardingAgent.return_value = mock_instance
+
+            response = await self.orchestrator.process_message(
+                user_id=uuid4(),
+                message="Continua",
+                conversation_id=uuid4(),
+                conversation_history=history,
+            )
+
+            assert response == "Continuando de onde paramos..."
+            # Verify conversation_history was passed
+            call_kwargs = mock_instance.process.call_args
+            assert call_kwargs.kwargs.get("conversation_history") == history or (
+                len(call_kwargs.args) > 2 and call_kwargs.args[2] == history
+            )

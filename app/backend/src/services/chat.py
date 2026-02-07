@@ -1,15 +1,19 @@
 import logging
 import time
+from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.agents.orchestrator import OrchestratorAgent
 from src.core.cache.decorator import redis_cache_decorator
 from src.db.models import Conversation, Message
 from src.schemas.chat import ConversationCreate, ConversationUpdate, MessageCreate
 from src.services.ai import get_ai_service
+from src.tools.executor import ToolExecutor
+from src.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -215,8 +219,8 @@ async def create_message(
     Raises:
         HTTPException: 404 if conversation not found, 403 if not authorized
     """
-    # Verify user has access to conversation and get full record
-    conversation = await get_conversation_by_id(db, conversation_id, user_id)
+    # Verify user has access to conversation
+    await get_conversation_by_id(db, conversation_id, user_id)
 
     user_message = Message(
         conversation_id=conversation_id,
@@ -233,30 +237,23 @@ async def create_message(
     messages_history = await get_conversation_messages(db, conversation_id, user_id)
     ai_messages = [{"role": msg.role, "content": msg.content} for msg in messages_history]
 
-    logger.info(
-        f"AI request started: conv_id={conversation_id} provider={conversation.ai_provider} "
-        f"model={conversation.ai_model}"
-    )
+    logger.info(f"AI request started: conv_id={conversation_id} user_id={user_id}")
 
     start_time = time.time()
     try:
-        ai_service = get_ai_service(conversation.ai_provider)
-        ai_response = await ai_service.generate_response(
-            ai_messages,
-            conversation.ai_model,
-            conversation.system_prompt,
+        ai_response = await _get_orchestrator_response(
+            db, user_id, message_data.content, conversation_id, ai_messages
         )
         duration_ms = int((time.time() - start_time) * 1000)
         logger.info(
-            f"AI request completed: conv_id={conversation_id} provider={conversation.ai_provider} "
+            f"AI request completed: conv_id={conversation_id} "
             f"duration_ms={duration_ms} response_length={len(ai_response)}"
         )
     except HTTPException:
         raise
     except ValueError as exc:
         logger.error(
-            f"AI request failed: conv_id={conversation_id} provider={conversation.ai_provider} "
-            f"error=ValueError: {str(exc)}"
+            f"AI request failed: conv_id={conversation_id} " f"error=ValueError: {str(exc)}"
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -264,7 +261,7 @@ async def create_message(
         ) from exc
     except Exception as exc:  # noqa: BLE001 - convert unexpected errors to HTTPException
         logger.error(
-            f"AI request failed: conv_id={conversation_id} provider={conversation.ai_provider} "
+            f"AI request failed: conv_id={conversation_id} "
             f"error={type(exc).__name__}: {str(exc)}"
         )
         raise HTTPException(
@@ -289,3 +286,63 @@ async def create_message(
     )
 
     return user_message, assistant_message
+
+
+class _ContextServiceAdapter:
+    """Adapter that wraps a db session to provide build_permanent_context."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        self._db = db
+
+    async def build_permanent_context(self, user_id: UUID) -> dict[str, Any]:
+        from src.services.context import build_permanent_context
+
+        return await build_permanent_context(self._db, user_id)
+
+
+async def _get_orchestrator_response(
+    db: AsyncSession,
+    user_id: UUID,
+    message: str,
+    conversation_id: UUID,
+    conversation_history: list[dict[str, str]],
+) -> str:
+    """Route a message through the OrchestratorAgent.
+
+    Args:
+        db: Database session
+        user_id: User ID
+        message: User's message content
+        conversation_id: Conversation ID
+        conversation_history: Previous messages in the conversation
+
+    Returns:
+        Response string from the orchestrator
+    """
+    from src.tools.onboarding_tools import (
+        CompleteOnboardingStepTool,
+        SaveUserPreferencesTool,
+        SaveUserProfileTool,
+    )
+
+    ai_service = get_ai_service("openai")
+    registry = ToolRegistry()
+    registry.register(SaveUserProfileTool(db_session=db))
+    registry.register(SaveUserPreferencesTool(db_session=db))
+    registry.register(CompleteOnboardingStepTool(db_session=db))
+    executor = ToolExecutor(registry)
+
+    context_adapter = _ContextServiceAdapter(db)
+    orchestrator = OrchestratorAgent(
+        llm_service=ai_service,
+        tool_registry=registry,
+        tool_executor=executor,
+        context_service=context_adapter,
+    )
+
+    return await orchestrator.process_message(
+        user_id=user_id,
+        message=message,
+        conversation_id=conversation_id,
+        conversation_history=conversation_history,
+    )

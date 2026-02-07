@@ -196,10 +196,11 @@ async def test_create_message_generates_ai_response(
     auth_headers: dict[str, str],
     mocker: MockerFixture,
 ) -> None:
-    """Creating a message should persist user + assistant responses via the AI service."""
-    mock_ai_service = mocker.Mock()
-    mock_ai_service.generate_response = mocker.AsyncMock(return_value="AI response")
-    mocker.patch("src.services.chat.get_ai_service", return_value=mock_ai_service)
+    """Creating a message should persist user + assistant responses via the orchestrator."""
+    mocker.patch(
+        "src.services.chat._get_orchestrator_response",
+        return_value="AI response",
+    )
 
     create_response = await client.post(
         "/chat/conversations",
@@ -234,12 +235,6 @@ async def test_create_message_generates_ai_response(
     assert assistant_payload["role"] == "assistant"
     assert assistant_payload["content"] == "AI response"
     assert assistant_payload["tokens_used"] is None
-
-    mock_ai_service.generate_response.assert_awaited_once()
-    call_args = mock_ai_service.generate_response.await_args
-    # Args are: (messages, model, system_prompt)
-    assert call_args.args[1] == "gpt-4"
-    assert call_args.args[2] == "You are helpful."
 
     messages_response = await client.get(
         f"/chat/conversations/{conversation_id}/messages", headers=auth_headers

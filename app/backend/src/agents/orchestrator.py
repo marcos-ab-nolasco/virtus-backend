@@ -18,7 +18,8 @@ from typing import Any
 from uuid import UUID
 
 from src.agents.actions import Action, ActionType
-from src.agents.base import AgentResponse, BaseAgent
+from src.agents.base import BaseAgent
+from src.agents.onboarding import OnboardingAgent
 from src.tools.base import ToolResult
 from src.tools.executor import ToolExecutor
 from src.tools.registry import ToolRegistry
@@ -105,6 +106,7 @@ class OrchestratorAgent(BaseAgent):
         user_id: UUID,
         message: str,
         conversation_id: UUID,
+        conversation_history: list[dict[str, Any]] | None = None,
     ) -> str:
         """
         Process a user message and return a response.
@@ -115,6 +117,7 @@ class OrchestratorAgent(BaseAgent):
             user_id: UUID of the user
             message: User's message
             conversation_id: UUID of the conversation
+            conversation_history: Optional conversation history for context
 
         Returns:
             Response string to send back to user
@@ -128,8 +131,8 @@ class OrchestratorAgent(BaseAgent):
 
             # Step 2: Check if onboarding is needed
             if self.should_route_to_onboarding(context):
-                logger.info("User needs onboarding, returning handoff signal")
-                return await self._handle_onboarding_needed(message, context)
+                logger.info("User needs onboarding, delegating to OnboardingAgent")
+                return await self._handle_onboarding_needed(message, context, conversation_history)
 
             # Step 3: Decide action
             action = await self._decide_action(message, context)
@@ -170,37 +173,42 @@ class OrchestratorAgent(BaseAgent):
             return self._get_fallback_error_message()
 
     async def _handle_onboarding_needed(
-        self, message: str, context: dict[str, Any]
+        self,
+        message: str,
+        context: dict[str, Any],
+        conversation_history: list[dict[str, Any]] | None = None,
     ) -> str:
         """
-        Handle case when user needs onboarding.
-
-        For now, returns a message indicating onboarding is needed.
-        In the future, this will be handled by AgentRouter.
+        Delegate to OnboardingAgent when user needs onboarding.
 
         Args:
             message: User's message
             context: User context
+            conversation_history: Optional conversation history
 
         Returns:
-            Response indicating onboarding is needed
+            Response from OnboardingAgent
         """
-        # Get user's preferred name or full name
-        user_info = context.get("user", {})
-        profile_info = context.get("profile", {})
-        preferred_name = profile_info.get("preferred_name")
-        full_name = user_info.get("full_name", "")
-        name = preferred_name or (full_name.split()[0] if full_name else "")
+        onboarding_agent = OnboardingAgent(
+            llm_service=self.llm_service,
+            tool_registry=self.tool_registry,
+        )
 
-        greeting = f"Olá{', ' + name if name else ''}!"
+        agent_response = await onboarding_agent.process(
+            message=message,
+            user_context=context,
+            conversation_history=conversation_history or [],
+        )
 
-        return f"""{greeting}
+        # Execute any tool calls from the onboarding agent
+        if agent_response.tool_calls:
+            for tool_call in agent_response.tool_calls:
+                tool_name = tool_call.get("name")
+                tool_args = tool_call.get("arguments", {})
+                if tool_name:
+                    await self.tool_executor.execute(tool_name, tool_args)
 
-Antes de começarmos, preciso te conhecer um pouco melhor. Vou fazer algumas perguntas rápidas - leva só 3-5 minutos.
-
-Isso vai me ajudar a te acompanhar do jeito que funciona melhor pra você.
-
-Vamos lá?"""
+        return agent_response.response or "Desculpe, tive um problema."
 
     async def _build_context(self, user_id: UUID) -> dict[str, Any]:
         """
