@@ -403,8 +403,15 @@ A tool vai marcar o onboarding como COMPLETED automaticamente.
 
         if current_step == "frequency":
             freq_keywords = [
-                "raramente", "às vezes", "frequente", "rarely",
-                "sometimes", "frequently", "pouco", "muito", "sempre",
+                "raramente",
+                "às vezes",
+                "frequente",
+                "rarely",
+                "sometimes",
+                "frequently",
+                "pouco",
+                "muito",
+                "sempre",
             ]
             if any(kw in message.lower() for kw in freq_keywords):
                 if "save_user_preferences" not in tool_names:
@@ -469,7 +476,7 @@ A tool vai marcar o onboarding como COMPLETED automaticamente.
 
         # Determine completed steps
         step_idx = STEP_ORDER.get(current_step, 0)
-        completed = [s for s in ONBOARDING_STEPS[:step_idx]]
+        completed = list(ONBOARDING_STEPS[:step_idx])
 
         lines = [
             "## Estado Atual no Banco de Dados",

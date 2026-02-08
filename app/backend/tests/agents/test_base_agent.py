@@ -571,9 +571,7 @@ class TestMultiRoundToolLoop:
 
         self.mock_llm.generate_response_with_tools = AsyncMock(side_effect=side_effect)
 
-        response = await agent.process(
-            message="Test", user_context={}, conversation_history=[]
-        )
+        response = await agent.process(message="Test", user_context={}, conversation_history=[])
 
         assert response.response == "Final answer"
         assert call_count == 3
@@ -605,9 +603,7 @@ class TestMultiRoundToolLoop:
 
         self.mock_llm.generate_response_with_tools = AsyncMock(side_effect=side_effect)
 
-        response = await agent.process(
-            message="Test", user_context={}, conversation_history=[]
-        )
+        response = await agent.process(message="Test", user_context={}, conversation_history=[])
 
         assert response.response == "Forced text"
         # 3 rounds of tools + 1 forced text = 4 calls
@@ -636,9 +632,7 @@ class TestMultiRoundToolLoop:
 
         self.mock_llm.generate_response_with_tools = AsyncMock(side_effect=side_effect)
 
-        response = await agent.process(
-            message="Test", user_context={}, conversation_history=[]
-        )
+        response = await agent.process(message="Test", user_context={}, conversation_history=[])
 
         assert response.response == "Done"
         assert len(calls) == 2
@@ -647,6 +641,7 @@ class TestMultiRoundToolLoop:
     @pytest.mark.asyncio
     async def test_tool_loop_failed_tool_visible_in_next_round(self, tmp_path: Path) -> None:
         """Tool error in round 1 is visible to LLM in round 2."""
+
         # Register a failing tool
         class FailingTool(BaseTool):
             name = "test_tool"
@@ -687,9 +682,7 @@ class TestMultiRoundToolLoop:
 
         self.mock_llm.generate_response_with_tools = AsyncMock(side_effect=side_effect)
 
-        response = await agent.process(
-            message="Test", user_context={}, conversation_history=[]
-        )
+        response = await agent.process(message="Test", user_context={}, conversation_history=[])
 
         assert response.response == "Tool failed, sorry"
         # Second call should have tool messages with error
@@ -711,9 +704,7 @@ class TestMultiRoundToolLoop:
             }
         )
 
-        response = await agent.process(
-            message="Hi", user_context={}, conversation_history=[]
-        )
+        response = await agent.process(message="Hi", user_context={}, conversation_history=[])
 
         assert response.metadata.get("tool_rounds") == 0
 
@@ -741,9 +732,7 @@ class TestValidateToolUsage:
     def test_validate_default_returns_none(self, tmp_path: Path) -> None:
         """Default validate_tool_usage should return None (no validation)."""
         agent = self._make_agent(tmp_path)
-        result = agent.validate_tool_usage(
-            tool_calls_made=[], user_context={}, message="hello"
-        )
+        result = agent.validate_tool_usage(tool_calls_made=[], user_context={}, message="hello")
         assert result is None
 
     @pytest.mark.asyncio
@@ -788,9 +777,7 @@ class TestValidateToolUsage:
 
         self.mock_llm.generate_response_with_tools = AsyncMock(side_effect=side_effect)
 
-        response = await agent.process(
-            message="Test", user_context={}, conversation_history=[]
-        )
+        await agent.process(message="Test", user_context={}, conversation_history=[])
 
         # Validation called once (initial); retry does NOT re-validate (avoids infinite loop)
         assert agent.validation_call_count == 1
@@ -810,9 +797,7 @@ class TestValidateToolUsage:
             }
         )
 
-        response = await agent.process(
-            message="Test", user_context={}, conversation_history=[]
-        )
+        response = await agent.process(message="Test", user_context={}, conversation_history=[])
 
         assert response.response == "All good"
         assert self.mock_llm.generate_response_with_tools.call_count == 1

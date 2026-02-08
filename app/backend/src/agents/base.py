@@ -318,9 +318,7 @@ class BaseAgent(ABC):
 
             tool_rounds += 1
             all_tool_calls.extend(tool_calls)
-            assistant_msg, tool_messages = await self._execute_tool_calls(
-                executor, tool_calls
-            )
+            assistant_msg, tool_messages = await self._execute_tool_calls(executor, tool_calls)
             current_messages = [*current_messages, assistant_msg, *tool_messages]
 
         # max_rounds exhausted — force text response with tools=[]
