@@ -716,3 +716,103 @@ class TestMultiRoundToolLoop:
         )
 
         assert response.metadata.get("tool_rounds") == 0
+
+
+class TestValidateToolUsage:
+    """Tests for post-execution validation."""
+
+    def setup_method(self) -> None:
+        """Setup for each test."""
+        self.mock_llm = Mock(spec=BaseAIService)
+        self.registry = ToolRegistry()
+        self.registry.register(DummyTool())
+
+    def _make_agent(self, tmp_path: Path) -> ConcreteAgent:
+        skills_dir = tmp_path / "skills"
+        skill_dir = skills_dir / "test_skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "instructions.md").write_text("# Test")
+        return ConcreteAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.registry,
+            skills_path=skills_dir,
+        )
+
+    def test_validate_default_returns_none(self, tmp_path: Path) -> None:
+        """Default validate_tool_usage should return None (no validation)."""
+        agent = self._make_agent(tmp_path)
+        result = agent.validate_tool_usage(
+            tool_calls_made=[], user_context={}, message="hello"
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_process_retries_on_validation_failure(self, tmp_path: Path) -> None:
+        """When validate returns correction, loop should be called again."""
+
+        class ValidatingAgent(ConcreteAgent):
+            validation_call_count = 0
+
+            def validate_tool_usage(
+                self,
+                tool_calls_made: list[dict[str, Any]],
+                user_context: dict[str, Any],
+                message: str,
+            ) -> str | None:
+                self.validation_call_count += 1
+                if self.validation_call_count == 1:
+                    return "You must call test_tool"
+                return None
+
+        skills_dir = tmp_path / "skills"
+        skill_dir = skills_dir / "test_skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "instructions.md").write_text("# Test")
+
+        agent = ValidatingAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.registry,
+            skills_path=skills_dir,
+        )
+
+        call_count = 0
+
+        async def side_effect(*, messages: Any, system_prompt: Any, tools: Any) -> dict[str, Any]:
+            nonlocal call_count
+            call_count += 1
+            return {
+                "content": f"Response {call_count}",
+                "tool_calls": None,
+                "finish_reason": "stop",
+            }
+
+        self.mock_llm.generate_response_with_tools = AsyncMock(side_effect=side_effect)
+
+        response = await agent.process(
+            message="Test", user_context={}, conversation_history=[]
+        )
+
+        # Validation called once (initial); retry does NOT re-validate (avoids infinite loop)
+        assert agent.validation_call_count == 1
+        # LLM called at least twice (initial + retry)
+        assert call_count >= 2
+
+    @pytest.mark.asyncio
+    async def test_process_no_retry_on_validation_pass(self, tmp_path: Path) -> None:
+        """When validate returns None, no retry happens."""
+        agent = self._make_agent(tmp_path)
+
+        self.mock_llm.generate_response_with_tools = AsyncMock(
+            return_value={
+                "content": "All good",
+                "tool_calls": None,
+                "finish_reason": "stop",
+            }
+        )
+
+        response = await agent.process(
+            message="Test", user_context={}, conversation_history=[]
+        )
+
+        assert response.response == "All good"
+        assert self.mock_llm.generate_response_with_tools.call_count == 1

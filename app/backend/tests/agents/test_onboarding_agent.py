@@ -403,3 +403,51 @@ class TestStateSummary:
         )
 
         assert "Estado Atual no Banco de Dados" in prompt
+
+
+class TestOnboardingValidation:
+    """Tests for onboarding-specific tool usage validation."""
+
+    def setup_method(self) -> None:
+        """Setup for each test."""
+        self.mock_llm = Mock(spec=BaseAIService)
+        self.mock_registry = Mock(spec=ToolRegistry)
+        self.agent = OnboardingAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.mock_registry,
+        )
+
+    def test_onboarding_validate_name_step_missing_save(self) -> None:
+        """Name step with user message but no save_user_profile → correction."""
+        context = get_onboarding_context(step="name")
+        result = self.agent.validate_tool_usage(
+            tool_calls_made=[
+                {"name": "complete_onboarding_step", "arguments": {"step": "name"}},
+            ],
+            user_context=context,
+            message="Pode me chamar de Marcos",
+        )
+        assert result is not None
+        assert "save_user_profile" in result
+
+    def test_onboarding_validate_frequency_missing_save(self) -> None:
+        """Frequency step with choice but no save_user_preferences → correction."""
+        context = get_onboarding_context(step="frequency")
+        result = self.agent.validate_tool_usage(
+            tool_calls_made=[],
+            user_context=context,
+            message="Quero contato frequente",
+        )
+        assert result is not None
+        assert "save_user_preferences" in result
+
+    def test_onboarding_validate_closing_missing_complete(self) -> None:
+        """Closing step without complete_onboarding_step → correction."""
+        context = get_onboarding_context(step="closing")
+        result = self.agent.validate_tool_usage(
+            tool_calls_made=[],
+            user_context=context,
+            message="Obrigado!",
+        )
+        assert result is not None
+        assert "complete_onboarding_step" in result

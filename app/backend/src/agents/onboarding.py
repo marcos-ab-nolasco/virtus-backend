@@ -177,6 +177,26 @@ class OnboardingAgent(BaseAgent):
                 tool_definitions=tool_definitions,
             )
 
+            # Post-execution validation
+            tool_calls_made = response.metadata.get("tool_calls", [])
+            correction = self.validate_tool_usage(
+                tool_calls_made=tool_calls_made,
+                user_context=user_context,
+                message=message,
+            )
+            if correction:
+                corrective_messages = [
+                    *messages,
+                    {"role": "assistant", "content": response.response},
+                    {"role": "user", "content": correction},
+                ]
+                response = await self._run_tool_loop(
+                    messages=corrective_messages,
+                    system_prompt=system_prompt,
+                    tool_definitions=tool_definitions,
+                    max_rounds=2,
+                )
+
             response.metadata.update(
                 {
                     "current_step": current_step,
@@ -353,6 +373,60 @@ A tool vai marcar o onboarding como COMPLETED automaticamente.
         }
 
         return instructions.get(step, instructions["intro"])
+
+    def validate_tool_usage(
+        self,
+        tool_calls_made: list[dict[str, Any]],
+        user_context: dict[str, Any],
+        message: str,
+    ) -> str | None:
+        """Validate that required tools were called for the current step."""
+        current_step = self.get_current_step(user_context)
+        tool_names = {tc.get("name") for tc in tool_calls_made}
+
+        if current_step == "name" and len(message) > 3:
+            if "save_user_profile" not in tool_names:
+                return (
+                    "CORREÇÃO: O usuário forneceu seu nome, mas save_user_profile "
+                    "não foi chamada. Chame save_user_profile com preferred_name agora."
+                )
+
+        if current_step == "frequency":
+            freq_keywords = [
+                "raramente", "às vezes", "frequente", "rarely",
+                "sometimes", "frequently", "pouco", "muito", "sempre",
+            ]
+            if any(kw in message.lower() for kw in freq_keywords):
+                if "save_user_preferences" not in tool_names:
+                    return (
+                        "CORREÇÃO: O usuário escolheu uma frequência, mas "
+                        "save_user_preferences não foi chamada. Chame agora."
+                    )
+
+        if current_step == "routine":
+            tz_keywords = ["fuso", "timezone", "horário", "são paulo", "brasília", "utc"]
+            work_keywords = ["freelancer", "clt", "estudante", "trabalho", "empresa", "autônomo"]
+            has_tz = any(kw in message.lower() for kw in tz_keywords)
+            has_work = any(kw in message.lower() for kw in work_keywords)
+            if has_tz and "save_user_preferences" not in tool_names:
+                return (
+                    "CORREÇÃO: O usuário forneceu timezone, mas "
+                    "save_user_preferences não foi chamada. Chame agora."
+                )
+            if has_work and "save_user_profile" not in tool_names:
+                return (
+                    "CORREÇÃO: O usuário forneceu contexto de trabalho, mas "
+                    "save_user_profile não foi chamada. Chame agora."
+                )
+
+        if current_step == "closing":
+            if "complete_onboarding_step" not in tool_names:
+                return (
+                    "CORREÇÃO: Etapa closing mas complete_onboarding_step não foi chamada. "
+                    "Chame complete_onboarding_step com step='closing' agora."
+                )
+
+        return None
 
     def build_state_summary(self, user_context: dict[str, Any]) -> str:
         """Build a summary of what's saved vs missing in the DB."""

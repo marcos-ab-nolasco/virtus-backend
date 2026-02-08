@@ -138,6 +138,7 @@ def _build_profile_context(profile: UserProfile) -> dict:
             profile.onboarding_completed_at.isoformat() if profile.onboarding_completed_at else None
         ),
         "preferred_name": profile.preferred_name,
+        "onboarding_data": profile.onboarding_data,
         "vision_5_years": profile.vision_5_years,
         "vision_5_years_themes": profile.vision_5_years_themes,
         "main_obstacle": profile.main_obstacle,

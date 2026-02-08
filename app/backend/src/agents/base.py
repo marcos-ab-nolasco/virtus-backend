@@ -212,11 +212,42 @@ class BaseAgent(ABC):
         tool_definitions = self._get_tool_definitions()
         messages = self._build_messages(conversation_history, message)
 
-        return await self._run_tool_loop(
+        response = await self._run_tool_loop(
             messages=messages,
             system_prompt=system_prompt,
             tool_definitions=tool_definitions,
         )
+
+        # Post-execution validation
+        tool_calls_made = response.metadata.get("tool_calls", [])
+        correction = self.validate_tool_usage(
+            tool_calls_made=tool_calls_made,
+            user_context=user_context,
+            message=message,
+        )
+        if correction:
+            corrective_messages = [
+                *messages,
+                {"role": "assistant", "content": response.response},
+                {"role": "user", "content": correction},
+            ]
+            response = await self._run_tool_loop(
+                messages=corrective_messages,
+                system_prompt=system_prompt,
+                tool_definitions=tool_definitions,
+                max_rounds=2,
+            )
+
+        return response
+
+    def validate_tool_usage(
+        self,
+        tool_calls_made: list[dict[str, Any]],
+        user_context: dict[str, Any],
+        message: str,
+    ) -> str | None:
+        """Return corrective prompt if expected tools were missed, else None."""
+        return None
 
     async def _execute_tool_calls(
         self,
