@@ -451,3 +451,81 @@ class TestOnboardingValidation:
         )
         assert result is not None
         assert "complete_onboarding_step" in result
+
+
+class TestConfirmationThreshold:
+    """Tests for data point counting and confirmation injection."""
+
+    def setup_method(self) -> None:
+        """Setup for each test."""
+        self.mock_llm = Mock(spec=BaseAIService)
+        self.mock_registry = Mock(spec=ToolRegistry)
+        self.agent = OnboardingAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.mock_registry,
+        )
+
+    def test_count_data_points_single(self) -> None:
+        """Message with 1 data point → count 1."""
+        count = self.agent._count_data_points("Me chama de Marcos")
+        assert count == 1
+
+    def test_count_data_points_many(self) -> None:
+        """Full message with many data points → count >= 5."""
+        msg = (
+            "Me chama de Marcos, meu fuso é São Paulo, "
+            "trabalho como freelancer, quero contato frequente, "
+            "meu objetivo é ser mais produtivo e organizado"
+        )
+        count = self.agent._count_data_points(msg)
+        assert count >= 5
+
+    def test_confirmation_injected_when_threshold_met(self) -> None:
+        """5+ data points → 'CONFIRMAÇÃO' in prompt."""
+        skills_path = Path(__file__).parent.parent.parent / "src" / "skills"
+        agent = OnboardingAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.mock_registry,
+            skills_path=skills_path,
+        )
+        context = get_onboarding_context(step="name")
+        context["profile"]["onboarding_data"] = {}
+
+        msg = (
+            "Me chama de Marcos, meu fuso é São Paulo, "
+            "trabalho como freelancer, quero contato frequente, "
+            "meu objetivo é ser mais produtivo e organizado"
+        )
+
+        prompt = agent._build_onboarding_prompt(
+            current_step="name",
+            user_name="",
+            user_id="user-123",
+            user_context=context,
+            message=msg,
+        )
+
+        assert "CONFIRMAÇÃO" in prompt
+
+    def test_no_confirmation_below_threshold(self) -> None:
+        """2 data points → no confirmation."""
+        skills_path = Path(__file__).parent.parent.parent / "src" / "skills"
+        agent = OnboardingAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.mock_registry,
+            skills_path=skills_path,
+        )
+        context = get_onboarding_context(step="name")
+        context["profile"]["onboarding_data"] = {}
+
+        msg = "Me chama de Marcos"
+
+        prompt = agent._build_onboarding_prompt(
+            current_step="name",
+            user_name="",
+            user_id="user-123",
+            user_context=context,
+            message=msg,
+        )
+
+        assert "CONFIRMAÇÃO" not in prompt

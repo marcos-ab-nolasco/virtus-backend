@@ -163,6 +163,7 @@ class OnboardingAgent(BaseAgent):
                 user_name=user_name,
                 user_id=user_id,
                 user_context=user_context,
+                message=message,
             )
 
             # Prepare messages for LLM
@@ -219,6 +220,7 @@ class OnboardingAgent(BaseAgent):
         user_name: str,
         user_id: str,
         user_context: dict[str, Any],
+        message: str = "",
     ) -> str:
         """
         Build the system prompt for the current onboarding step.
@@ -238,7 +240,7 @@ class OnboardingAgent(BaseAgent):
         # Add step-specific instructions
         step_instructions = self._get_step_instructions(current_step, user_name, user_id)
 
-        return f"""{base_prompt}
+        prompt = f"""{base_prompt}
 
 ---
 
@@ -263,6 +265,14 @@ Você está conduzindo o onboarding express do usuário.
 5. Se o usuário quiser pular, permita (exceto frequency que é obrigatório)
 6. Responda em português brasileiro
 """
+        if message and self._count_data_points(message) >= 5:
+            prompt += """
+## CONFIRMAÇÃO NECESSÁRIA
+O usuário forneceu muitos dados de uma vez. ANTES de salvar, liste os dados
+extraídos e peça confirmação. Só chame as tools DEPOIS da confirmação.
+"""
+
+        return prompt
 
     def _get_step_instructions(self, step: str, user_name: str, user_id: str) -> str:
         """
@@ -427,6 +437,22 @@ A tool vai marcar o onboarding como COMPLETED automaticamente.
                 )
 
         return None
+
+    def _count_data_points(self, message: str) -> int:
+        """Count distinct data categories mentioned in the message."""
+        msg_lower = message.lower()
+        categories = {
+            "name": ["chama de", "chame de", "meu nome", "pode me chamar", "nome é"],
+            "timezone": ["fuso", "timezone", "são paulo", "brasília", "utc", "horário"],
+            "work": ["freelancer", "clt", "estudante", "trabalho", "empresa", "autônomo"],
+            "frequency": ["frequente", "raramente", "às vezes", "contato", "frequência"],
+            "goals": ["objetivo", "meta", "produtiv", "organiz", "conquistar", "melhorar"],
+        }
+        count = 0
+        for keywords in categories.values():
+            if any(kw in msg_lower for kw in keywords):
+                count += 1
+        return count
 
     def build_state_summary(self, user_context: dict[str, Any]) -> str:
         """Build a summary of what's saved vs missing in the DB."""
