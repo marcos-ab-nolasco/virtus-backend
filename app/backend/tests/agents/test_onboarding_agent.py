@@ -337,3 +337,69 @@ class TestOnboardingStepInstructions:
         """Closing instructions should mention completing onboarding."""
         instructions = self.agent._get_step_instructions("closing", "Test", "user-123")
         assert "completed" in instructions.lower() or "finaliz" in instructions.lower()
+
+
+class TestStateSummary:
+    """Tests for build_state_summary and state injection."""
+
+    def setup_method(self) -> None:
+        """Setup for each test."""
+        self.mock_llm = Mock(spec=BaseAIService)
+        self.mock_registry = Mock(spec=ToolRegistry)
+        self.agent = OnboardingAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.mock_registry,
+        )
+
+    def test_state_summary_shows_missing_fields(self) -> None:
+        """Empty profile should show all fields as '(não definido)'."""
+        context = get_onboarding_context(step="name")
+        # Remove populated fields to simulate empty
+        context["profile"]["preferred_name"] = None
+        context["profile"]["onboarding_data"] = {}
+        context["preferences"]["contact_frequency"] = None
+        context["preferences"]["timezone"] = None
+
+        summary = self.agent.build_state_summary(context)
+
+        assert "(não definido)" in summary
+        assert "preferred_name" in summary
+
+    def test_state_summary_shows_saved_fields(self) -> None:
+        """Populated profile should show actual values."""
+        context = get_onboarding_context(step="routine", preferred_name="Marcos")
+        context["profile"]["onboarding_data"] = {
+            "work_context": "freelancer",
+            "initial_goals": ["ser mais produtivo"],
+        }
+        context["preferences"]["timezone"] = "America/Sao_Paulo"
+        context["preferences"]["contact_frequency"] = "RARELY"
+
+        summary = self.agent.build_state_summary(context)
+
+        assert "Marcos" in summary
+        assert "freelancer" in summary
+        assert "America/Sao_Paulo" in summary
+        assert "RARELY" in summary
+
+    def test_state_summary_in_system_prompt(self) -> None:
+        """System prompt should contain state summary."""
+        context = get_onboarding_context(step="name")
+        context["profile"]["onboarding_data"] = {}
+
+        # Use actual skills path
+        skills_path = Path(__file__).parent.parent.parent / "src" / "skills"
+        agent = OnboardingAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.mock_registry,
+            skills_path=skills_path,
+        )
+
+        prompt = agent._build_onboarding_prompt(
+            current_step="name",
+            user_name="Test",
+            user_id="user-123",
+            user_context=context,
+        )
+
+        assert "Estado Atual no Banco de Dados" in prompt

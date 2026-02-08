@@ -232,6 +232,8 @@ Você está conduzindo o onboarding express do usuário.
 
 {step_instructions}
 
+{self.build_state_summary(user_context)}
+
 ## Instruções Importantes
 
 1. Mantenha um tom acolhedor e conversacional
@@ -351,3 +353,36 @@ A tool vai marcar o onboarding como COMPLETED automaticamente.
         }
 
         return instructions.get(step, instructions["intro"])
+
+    def build_state_summary(self, user_context: dict[str, Any]) -> str:
+        """Build a summary of what's saved vs missing in the DB."""
+        profile = user_context.get("profile", {})
+        prefs = user_context.get("preferences", {})
+        onboarding_data = profile.get("onboarding_data", {}) or {}
+
+        def val(v: Any) -> str:
+            if v is None or v == "" or v == [] or v == {}:
+                return "(não definido)"
+            return str(v)
+
+        current_step = profile.get("onboarding_current_step") or "intro"
+
+        # Determine completed steps
+        step_idx = STEP_ORDER.get(current_step, 0)
+        completed = [s for s in ONBOARDING_STEPS[:step_idx]]
+
+        lines = [
+            "## Estado Atual no Banco de Dados",
+            f"- preferred_name: {val(profile.get('preferred_name'))}",
+            f"- onboarding_data.work_context: {val(onboarding_data.get('work_context'))}",
+            f"- onboarding_data.initial_state: {val(onboarding_data.get('initial_state'))}",
+            f"- onboarding_data.initial_goals: {val(onboarding_data.get('initial_goals'))}",
+            f"- contact_frequency: {val(prefs.get('contact_frequency'))}",
+            f"- timezone: {val(prefs.get('timezone'))}",
+            f"- current_step: {current_step} (steps concluídos: {', '.join(completed) or 'nenhum'})",
+            "",
+            "IMPORTANTE: Se o usuário já forneceu dados marcados como '(não definido)',",
+            "você DEVE usar as tools para salvá-los antes de responder.",
+        ]
+
+        return "\n".join(lines)
