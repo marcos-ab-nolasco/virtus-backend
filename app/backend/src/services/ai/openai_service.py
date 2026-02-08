@@ -236,6 +236,7 @@ class OpenAIService(BaseAIService):
             parsed_calls.append(
                 {
                     "id": tool_call.id,
+                    "type": getattr(tool_call, "type", "function"),
                     "name": tool_call.function.name,
                     "arguments": arguments,
                 }
@@ -258,7 +259,21 @@ class OpenAIService(BaseAIService):
             if msg.get("role") == "tool" and "tool_call_id" in msg:
                 entry["tool_call_id"] = msg["tool_call_id"]
             if msg.get("role") == "assistant" and "tool_calls" in msg:
-                entry["tool_calls"] = msg["tool_calls"]
+                entry["tool_calls"] = [
+                    {
+                        "id": tc["id"],
+                        "type": tc.get("type", "function"),
+                        "function": {
+                            "name": tc["name"],
+                            "arguments": (
+                                json.dumps(tc["arguments"], ensure_ascii=False)
+                                if isinstance(tc["arguments"], dict)
+                                else tc["arguments"]
+                            ),
+                        },
+                    }
+                    for tc in msg["tool_calls"]
+                ]
             payload.append(entry)
 
         return payload

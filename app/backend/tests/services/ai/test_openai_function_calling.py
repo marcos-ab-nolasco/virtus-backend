@@ -97,6 +97,7 @@ class TestGenerateResponseWithTools:
         # Mock tool call
         mock_tool_call = MagicMock()
         mock_tool_call.id = "call_123"
+        mock_tool_call.type = "function"
         mock_tool_call.function.name = "get_weather"
         mock_tool_call.function.arguments = '{"location": "San Francisco"}'
 
@@ -141,6 +142,7 @@ class TestGenerateResponseWithTools:
 
         tool_call = result["tool_calls"][0]
         assert tool_call["id"] == "call_123"
+        assert tool_call["type"] == "function"
         assert tool_call["name"] == "get_weather"
         assert tool_call["arguments"] == {"location": "San Francisco"}
         assert result["finish_reason"] == "tool_calls"
@@ -315,3 +317,94 @@ class TestGenerateResponseWithTools:
         assert result["content"] == "Success"
         # Verify it was called 3 times
         assert mock_openai_client.chat.completions.create.call_count == 3
+
+
+class TestParseToolCalls:
+    """Test _parse_tool_calls preserves OpenAI-compatible format."""
+
+    def test_parse_tool_calls_includes_type_field(self) -> None:
+        """Parsed tool calls must include type='function' for OpenAI roundtrip."""
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_abc"
+        mock_tool_call.type = "function"
+        mock_tool_call.function.name = "save_profile"
+        mock_tool_call.function.arguments = '{"name": "João"}'
+
+        result = OpenAIService._parse_tool_calls([mock_tool_call])
+
+        assert len(result) == 1
+        assert result[0]["type"] == "function"
+        assert result[0]["id"] == "call_abc"
+        assert result[0]["name"] == "save_profile"
+        assert result[0]["arguments"] == {"name": "João"}
+
+    def test_parse_tool_calls_multiple_calls(self) -> None:
+        """Multiple tool calls should all have type field."""
+        calls = []
+        for i in range(3):
+            tc = MagicMock()
+            tc.id = f"call_{i}"
+            tc.type = "function"
+            tc.function.name = f"tool_{i}"
+            tc.function.arguments = "{}"
+            calls.append(tc)
+
+        result = OpenAIService._parse_tool_calls(calls)
+
+        assert len(result) == 3
+        for parsed in result:
+            assert parsed["type"] == "function"
+
+
+class TestBuildPayloadToolCalls:
+    """Test _build_payload correctly formats assistant messages with tool_calls."""
+
+    def test_build_payload_formats_tool_calls_for_openai_api(self) -> None:
+        """Assistant messages with tool_calls must use OpenAI nested format."""
+        # This is the internal format (after _parse_tool_calls)
+        messages = [
+            {"role": "user", "content": "Do something"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_123",
+                        "type": "function",
+                        "name": "save_profile",
+                        "arguments": {"name": "João"},
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "content": '{"success": true}',
+                "tool_call_id": "call_123",
+            },
+        ]
+
+        payload = OpenAIService._build_payload(messages, system_prompt=None)
+
+        # Find assistant message in payload
+        assistant_msg = next(m for m in payload if m["role"] == "assistant")
+        tc = assistant_msg["tool_calls"][0]
+
+        # Must have OpenAI-compatible nested format
+        assert tc["id"] == "call_123"
+        assert tc["type"] == "function"
+        assert tc["function"]["name"] == "save_profile"
+        assert tc["function"]["arguments"] == '{"name": "João"}'
+
+    def test_build_payload_roundtrip_preserves_tool_call_id(self) -> None:
+        """Tool messages must preserve tool_call_id."""
+        messages = [
+            {
+                "role": "tool",
+                "content": '{"success": true}',
+                "tool_call_id": "call_xyz",
+            },
+        ]
+
+        payload = OpenAIService._build_payload(messages, system_prompt=None)
+
+        assert payload[0]["tool_call_id"] == "call_xyz"
