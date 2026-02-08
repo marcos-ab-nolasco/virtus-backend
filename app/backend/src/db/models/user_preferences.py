@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from src.db.models.user import User
 
 
-class WeekDay(str, enum.Enum):
+class WeekDay(enum.StrEnum):
     """Days of the week for weekly review scheduling."""
 
     MONDAY = "MONDAY"
@@ -25,7 +25,7 @@ class WeekDay(str, enum.Enum):
     SUNDAY = "SUNDAY"
 
 
-class CommunicationStyle(str, enum.Enum):
+class CommunicationStyle(enum.StrEnum):
     """AI communication style preferences."""
 
     DIRECT = "DIRECT"
@@ -33,7 +33,7 @@ class CommunicationStyle(str, enum.Enum):
     MOTIVATING = "MOTIVATING"
 
 
-class ContactFrequency(str, enum.Enum):
+class ContactFrequency(enum.StrEnum):
     """Preferred frequency of contact from the AI coach."""
 
     RARELY = "RARELY"

@@ -90,7 +90,7 @@ class OnboardingAgent(BaseAgent):
         if not current_step or current_step not in ONBOARDING_STEPS:
             return "intro"
 
-        return current_step
+        return str(current_step)
 
     def get_next_step(self, current_step: str) -> str | None:
         """
@@ -124,12 +124,12 @@ class OnboardingAgent(BaseAgent):
         profile = context.get("profile", {})
         preferred_name = profile.get("preferred_name")
         if preferred_name:
-            return preferred_name
+            return str(preferred_name)
 
         user_info = context.get("user", {})
         full_name = user_info.get("full_name", "")
         if full_name:
-            return full_name.split()[0]
+            return str(full_name.split()[0])
 
         return ""
 

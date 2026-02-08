@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from src.db.models.user import User
 
 
-class EventType(str, enum.Enum):
+class EventType(enum.StrEnum):
     """Event types inferred from calendar event metadata."""
 
     MEETING = "MEETING"

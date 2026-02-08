@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from src.db.models.user import User
 
 
-class CalendarProvider(str, enum.Enum):
+class CalendarProvider(enum.StrEnum):
     """Calendar providers supported for integration."""
 
     GOOGLE_CALENDAR = "GOOGLE_CALENDAR"
@@ -29,7 +29,7 @@ class CalendarProvider(str, enum.Enum):
     APPLE_CALENDAR = "APPLE_CALENDAR"
 
 
-class IntegrationStatus(str, enum.Enum):
+class IntegrationStatus(enum.StrEnum):
     """Status of calendar integration."""
 
     PENDING = "PENDING"  # OAuth in progress

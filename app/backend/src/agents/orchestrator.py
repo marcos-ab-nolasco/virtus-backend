@@ -91,7 +91,7 @@ class OrchestratorAgent(BaseAgent):
             return True
 
         onboarding_status = profile.get("onboarding_status")
-        return onboarding_status != "COMPLETED"
+        return bool(onboarding_status != "COMPLETED")
 
     async def process_message(
         self,
@@ -148,7 +148,7 @@ class OrchestratorAgent(BaseAgent):
         message: str,
         user_context: dict[str, Any],
         conversation_history: list[dict[str, Any]],
-    ):
+    ) -> AgentResponse:
         """
         Decide the next agent based on user context.
 

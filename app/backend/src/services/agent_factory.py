@@ -61,7 +61,7 @@ class AgentFactory:
             context_service=self._context,
         )
 
-    def create_agent(self, agent_name: str):
+    def create_agent(self, agent_name: str) -> OnboardingAgent | AdvisorAgent:
         if agent_name == "onboarding":
             registry = self._get_registry(agent_name)
             return OnboardingAgent(

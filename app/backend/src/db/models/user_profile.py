@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from src.db.models.user import User
 
 
-class OnboardingStatus(str, enum.Enum):
+class OnboardingStatus(enum.StrEnum):
     """Onboarding workflow states."""
 
     NOT_STARTED = "NOT_STARTED"
@@ -22,7 +22,7 @@ class OnboardingStatus(str, enum.Enum):
     COMPLETED = "COMPLETED"
 
 
-class LifeArea(str, enum.Enum):
+class LifeArea(enum.StrEnum):
     """Life areas for objectives and satisfaction tracking."""
 
     HEALTH = "HEALTH"
@@ -31,7 +31,7 @@ class LifeArea(str, enum.Enum):
     PERSONAL_TIME = "PERSONAL_TIME"
 
 
-class PatternType(str, enum.Enum):
+class PatternType(enum.StrEnum):
     """Types of observed behavioral patterns."""
 
     ENERGY = "ENERGY"
@@ -40,7 +40,7 @@ class PatternType(str, enum.Enum):
     COMMUNICATION = "COMMUNICATION"
 
 
-class StrengthCategory(str, enum.Enum):
+class StrengthCategory(enum.StrEnum):
     """Categories of personal strengths."""
 
     TECHNICAL = "TECHNICAL"
@@ -50,14 +50,14 @@ class StrengthCategory(str, enum.Enum):
     ORGANIZATIONAL = "ORGANIZATIONAL"
 
 
-class StrengthSource(str, enum.Enum):
+class StrengthSource(enum.StrEnum):
     """Source of strength identification."""
 
     DECLARED = "DECLARED"
     INFERRED = "INFERRED"
 
 
-class InterestType(str, enum.Enum):
+class InterestType(enum.StrEnum):
     """Types of interests."""
 
     HOBBY = "HOBBY"
@@ -66,7 +66,7 @@ class InterestType(str, enum.Enum):
     CURIOSITY = "CURIOSITY"
 
 
-class EngagementLevel(str, enum.Enum):
+class EngagementLevel(enum.StrEnum):
     """Level of engagement with an interest."""
 
     ACTIVE = "ACTIVE"
