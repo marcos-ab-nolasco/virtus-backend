@@ -524,3 +524,195 @@ class TestProcess:
         assert tool_messages, "Expected tool result messages in second call"
         assert tool_messages[-1].get("tool_call_id") == "call_1"
         assert "ok" in (tool_messages[-1].get("content") or "")
+
+
+class TestMultiRoundToolLoop:
+    """Tests for multi-round tool calling loop."""
+
+    def setup_method(self) -> None:
+        """Setup for each test."""
+        self.mock_llm = Mock(spec=BaseAIService)
+        self.registry = ToolRegistry()
+        self.registry.register(DummyTool())
+
+    def _make_agent(self, tmp_path: Path) -> ConcreteAgent:
+        skills_dir = tmp_path / "skills"
+        skill_dir = skills_dir / "test_skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "instructions.md").write_text("# Test")
+        return ConcreteAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.registry,
+            skills_path=skills_dir,
+        )
+
+    @pytest.mark.asyncio
+    async def test_tool_loop_multi_round_chains_calls(self, tmp_path: Path) -> None:
+        """LLM returns tool_calls in rounds 1-2, text in round 3."""
+        agent = self._make_agent(tmp_path)
+        call_count = 0
+
+        async def side_effect(*, messages: Any, system_prompt: Any, tools: Any) -> dict[str, Any]:
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                return {
+                    "content": None,
+                    "tool_calls": [
+                        {"id": f"call_{call_count}", "name": "test_tool", "arguments": {}}
+                    ],
+                    "finish_reason": "tool_calls",
+                }
+            return {
+                "content": "Final answer",
+                "tool_calls": None,
+                "finish_reason": "stop",
+            }
+
+        self.mock_llm.generate_response_with_tools = AsyncMock(side_effect=side_effect)
+
+        response = await agent.process(
+            message="Test", user_context={}, conversation_history=[]
+        )
+
+        assert response.response == "Final answer"
+        assert call_count == 3
+        assert response.metadata.get("tool_rounds") == 2
+
+    @pytest.mark.asyncio
+    async def test_tool_loop_stops_at_max_rounds(self, tmp_path: Path) -> None:
+        """LLM always returns tool_calls → max_rounds+1 calls total (last forced text)."""
+        agent = self._make_agent(tmp_path)
+        call_count = 0
+
+        async def side_effect(*, messages: Any, system_prompt: Any, tools: Any) -> dict[str, Any]:
+            nonlocal call_count
+            call_count += 1
+            if tools:  # Has tools available → return tool calls
+                return {
+                    "content": None,
+                    "tool_calls": [
+                        {"id": f"call_{call_count}", "name": "test_tool", "arguments": {}}
+                    ],
+                    "finish_reason": "tool_calls",
+                }
+            # Forced text (tools=[])
+            return {
+                "content": "Forced text",
+                "tool_calls": None,
+                "finish_reason": "stop",
+            }
+
+        self.mock_llm.generate_response_with_tools = AsyncMock(side_effect=side_effect)
+
+        response = await agent.process(
+            message="Test", user_context={}, conversation_history=[]
+        )
+
+        assert response.response == "Forced text"
+        # 3 rounds of tools + 1 forced text = 4 calls
+        assert call_count == 4
+        assert response.metadata.get("tool_rounds") == 3
+
+    @pytest.mark.asyncio
+    async def test_tool_loop_single_round_backward_compatible(self, tmp_path: Path) -> None:
+        """Single round tools + text (current behavior still works)."""
+        agent = self._make_agent(tmp_path)
+        calls: list[dict[str, Any]] = []
+
+        async def side_effect(*, messages: Any, system_prompt: Any, tools: Any) -> dict[str, Any]:
+            calls.append({"tools": tools})
+            if len(calls) == 1:
+                return {
+                    "content": None,
+                    "tool_calls": [{"id": "call_1", "name": "test_tool", "arguments": {}}],
+                    "finish_reason": "tool_calls",
+                }
+            return {
+                "content": "Done",
+                "tool_calls": None,
+                "finish_reason": "stop",
+            }
+
+        self.mock_llm.generate_response_with_tools = AsyncMock(side_effect=side_effect)
+
+        response = await agent.process(
+            message="Test", user_context={}, conversation_history=[]
+        )
+
+        assert response.response == "Done"
+        assert len(calls) == 2
+        assert response.metadata.get("tool_rounds") == 1
+
+    @pytest.mark.asyncio
+    async def test_tool_loop_failed_tool_visible_in_next_round(self, tmp_path: Path) -> None:
+        """Tool error in round 1 is visible to LLM in round 2."""
+        # Register a failing tool
+        class FailingTool(BaseTool):
+            name = "test_tool"
+            description = "Fails"
+            parameters = {"type": "object", "properties": {}, "required": []}
+
+            async def execute(self, args: dict[str, Any]) -> ToolResult:
+                return ToolResult(success=False, data=None, error="DB connection failed")
+
+        registry = ToolRegistry()
+        registry.register(FailingTool())
+
+        skills_dir = tmp_path / "skills" / "test_skill"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "instructions.md").write_text("# Test")
+
+        agent = ConcreteAgent(
+            llm_service=self.mock_llm,
+            tool_registry=registry,
+            skills_path=tmp_path / "skills",
+        )
+
+        captured_messages: list[Any] = []
+
+        async def side_effect(*, messages: Any, system_prompt: Any, tools: Any) -> dict[str, Any]:
+            captured_messages.append(messages)
+            if len(captured_messages) == 1:
+                return {
+                    "content": None,
+                    "tool_calls": [{"id": "call_1", "name": "test_tool", "arguments": {}}],
+                    "finish_reason": "tool_calls",
+                }
+            return {
+                "content": "Tool failed, sorry",
+                "tool_calls": None,
+                "finish_reason": "stop",
+            }
+
+        self.mock_llm.generate_response_with_tools = AsyncMock(side_effect=side_effect)
+
+        response = await agent.process(
+            message="Test", user_context={}, conversation_history=[]
+        )
+
+        assert response.response == "Tool failed, sorry"
+        # Second call should have tool messages with error
+        second_call_msgs = captured_messages[1]
+        tool_msgs = [m for m in second_call_msgs if m.get("role") == "tool"]
+        assert any("DB connection failed" in (m.get("content") or "") for m in tool_msgs)
+
+    @pytest.mark.asyncio
+    async def test_metadata_tracks_tool_rounds(self, tmp_path: Path) -> None:
+        """metadata['tool_rounds'] should reflect number of tool execution rounds."""
+        agent = self._make_agent(tmp_path)
+
+        # No tool calls at all
+        self.mock_llm.generate_response_with_tools = AsyncMock(
+            return_value={
+                "content": "No tools needed",
+                "tool_calls": None,
+                "finish_reason": "stop",
+            }
+        )
+
+        response = await agent.process(
+            message="Hi", user_context={}, conversation_history=[]
+        )
+
+        assert response.metadata.get("tool_rounds") == 0

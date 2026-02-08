@@ -218,30 +218,17 @@ class BaseAgent(ABC):
             tool_definitions=tool_definitions,
         )
 
-    async def _run_tool_loop(
+    async def _execute_tool_calls(
         self,
-        *,
-        messages: list[dict[str, Any]],
-        system_prompt: str,
-        tool_definitions: list[dict[str, Any]],
-    ) -> AgentResponse:
-        """Execute tool-calling loop and return final response."""
-        result = await self.llm.generate_response_with_tools(
-            messages=messages,
-            system_prompt=system_prompt,
-            tools=tool_definitions,
-        )
-
-        tool_calls = result.get("tool_calls")
-        if not tool_calls:
-            return AgentResponse(
-                response=result.get("content"),
-                tool_calls=None,
-                metadata={"finish_reason": result.get("finish_reason")},
-            )
-
-        executor = ToolExecutor(self.tools)
-        assistant_tool_call = {"role": "assistant", "content": None, "tool_calls": tool_calls}
+        executor: ToolExecutor,
+        tool_calls: list[dict[str, Any]],
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """Execute tool calls and return assistant message + tool result messages."""
+        assistant_msg: dict[str, Any] = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": tool_calls,
+        }
         tool_messages: list[dict[str, Any]] = []
         for tool_call in tool_calls:
             tool_name = tool_call.get("name")
@@ -258,13 +245,56 @@ class BaseAgent(ABC):
                     payload = {"success": False, "data": None, "error": str(exc)}
 
             content = json.dumps(payload, ensure_ascii=False)
-            tool_message = {"role": "tool", "content": content}
+            tool_message: dict[str, Any] = {"role": "tool", "content": content}
             if tool_call_id:
                 tool_message["tool_call_id"] = tool_call_id
             tool_messages.append(tool_message)
 
+        return assistant_msg, tool_messages
+
+    async def _run_tool_loop(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        system_prompt: str,
+        tool_definitions: list[dict[str, Any]],
+        max_rounds: int = 3,
+    ) -> AgentResponse:
+        """Execute multi-round tool-calling loop and return final response."""
+        current_messages = list(messages)
+        executor = ToolExecutor(self.tools)
+        all_tool_calls: list[dict[str, Any]] = []
+        tool_rounds = 0
+
+        for _round in range(max_rounds):
+            result = await self.llm.generate_response_with_tools(
+                messages=current_messages,
+                system_prompt=system_prompt,
+                tools=tool_definitions,
+            )
+
+            tool_calls = result.get("tool_calls")
+            if not tool_calls:
+                return AgentResponse(
+                    response=result.get("content"),
+                    tool_calls=None,
+                    metadata={
+                        "finish_reason": result.get("finish_reason"),
+                        "tool_rounds": tool_rounds,
+                        **({"tool_calls": all_tool_calls} if all_tool_calls else {}),
+                    },
+                )
+
+            tool_rounds += 1
+            all_tool_calls.extend(tool_calls)
+            assistant_msg, tool_messages = await self._execute_tool_calls(
+                executor, tool_calls
+            )
+            current_messages = [*current_messages, assistant_msg, *tool_messages]
+
+        # max_rounds exhausted — force text response with tools=[]
         followup = await self.llm.generate_response_with_tools(
-            messages=[*messages, assistant_tool_call, *tool_messages],
+            messages=current_messages,
             system_prompt=system_prompt,
             tools=[],
         )
@@ -274,6 +304,7 @@ class BaseAgent(ABC):
             tool_calls=None,
             metadata={
                 "finish_reason": followup.get("finish_reason"),
-                "tool_calls": tool_calls,
+                "tool_rounds": tool_rounds,
+                **({"tool_calls": all_tool_calls} if all_tool_calls else {}),
             },
         )
