@@ -5,12 +5,15 @@ Define a interface comum que todos os agentes do sistema devem implementar.
 """
 
 import json
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from src.tools.executor import ToolExecutionError, ToolExecutor
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -64,6 +67,21 @@ class BaseAgent(ABC):
         self.llm = llm_service
         self.tools = tool_registry
         self._skills_path = skills_path or Path(__file__).parent.parent / "skills"
+        self._trace_context: dict[str, str] = {}
+
+    def set_trace_context(
+        self, *, user_id: str | None = None, conversation_id: str | None = None
+    ) -> None:
+        """Attach trace metadata for logging (user_id, conversation_id)."""
+        if user_id:
+            self._trace_context["user_id"] = str(user_id)
+        if conversation_id:
+            self._trace_context["conv_id"] = str(conversation_id)
+
+    def _trace_ctx_str(self) -> str:
+        if not self._trace_context:
+            return ""
+        return " ".join(f"{key}={value}" for key, value in self._trace_context.items())
 
     @property
     @abstractmethod
@@ -115,6 +133,13 @@ class BaseAgent(ABC):
         for skill_name in self.skills:
             content = self._load_skill_file(skill_name)
             skill_contents.append(content)
+
+        logger.info(
+            "Agent skills loaded: agent=%s skills=%s%s",
+            self.name,
+            self.skills,
+            f" {self._trace_ctx_str()}" if self._trace_context else "",
+        )
 
         return "\n\n---\n\n".join(skill_contents)
 
@@ -208,6 +233,13 @@ class BaseAgent(ABC):
         Returns:
             AgentResponse com resposta e/ou tool calls
         """
+        logger.info(
+            "Agent process start: agent=%s msg_len=%s%s",
+            self.name,
+            len(message or ""),
+            f" {self._trace_ctx_str()}" if self._trace_context else "",
+        )
+
         system_prompt = self.build_system_prompt(user_context)
         tool_definitions = self._get_tool_definitions()
         messages = self._build_messages(conversation_history, message)
@@ -238,6 +270,16 @@ class BaseAgent(ABC):
                 max_rounds=2,
             )
 
+        logger.info(
+            "Agent process end: agent=%s response_len=%s finish_reason=%s tool_rounds=%s tool_calls=%s%s",
+            self.name,
+            len(response.response or ""),
+            response.metadata.get("finish_reason"),
+            response.metadata.get("tool_rounds"),
+            len(response.metadata.get("tool_calls", []) or []),
+            f" {self._trace_ctx_str()}" if self._trace_context else "",
+        )
+
         return response
 
     def validate_tool_usage(
@@ -266,6 +308,14 @@ class BaseAgent(ABC):
             tool_args = tool_call.get("arguments", {})
             tool_call_id = tool_call.get("id")
 
+            logger.info(
+                "Agent tool call: agent=%s tool=%s args_keys=%s%s",
+                self.name,
+                tool_name,
+                sorted(tool_args.keys()) if isinstance(tool_args, dict) else "<non-dict>",
+                f" {self._trace_ctx_str()}" if self._trace_context else "",
+            )
+
             if not tool_name:
                 payload = {"success": False, "data": None, "error": "Missing tool name"}
             else:
@@ -274,6 +324,14 @@ class BaseAgent(ABC):
                     payload = tool_result.to_dict()
                 except ToolExecutionError as exc:
                     payload = {"success": False, "data": None, "error": str(exc)}
+
+            logger.info(
+                "Agent tool result: agent=%s tool=%s success=%s%s",
+                self.name,
+                tool_name,
+                payload.get("success"),
+                f" {self._trace_ctx_str()}" if self._trace_context else "",
+            )
 
             content = json.dumps(payload, ensure_ascii=False)
             tool_message: dict[str, Any] = {"role": "tool", "content": content}
