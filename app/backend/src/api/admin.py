@@ -9,7 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.dependencies import require_admin
 from src.db.models.user import User
 from src.db.session import get_db
-from src.schemas.admin import AdminUserList, AdminUserOnboardingResponse
+from src.schemas.admin import (
+    AdminConversationList,
+    AdminMessageList,
+    AdminUserList,
+    AdminUserOnboardingResponse,
+)
+from src.schemas.chat import ConversationRead, MessageRead
 from src.schemas.user import UserRead
 from src.schemas.user_preferences import UserPreferencesResponse
 from src.schemas.user_profile import UserProfileResponse
@@ -101,4 +107,52 @@ async def reset_user_onboarding(
         user_id=user_id,
         profile=UserProfileResponse.model_validate(profile),
         preferences=UserPreferencesResponse.model_validate(preferences),
+    )
+
+
+@router.get("/users/{user_id}/conversations", response_model=AdminConversationList)
+async def list_user_conversations(
+    user_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_admin: Annotated[User, Depends(require_admin)],
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> AdminConversationList:
+    """List conversations for a user."""
+    conversations, total = await admin_service.list_user_conversations(
+        db, target_user_id=user_id, limit=limit, offset=offset
+    )
+    return AdminConversationList(
+        conversations=[ConversationRead.model_validate(c) for c in conversations],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/users/{user_id}/conversations/{conversation_id}/messages",
+    response_model=AdminMessageList,
+)
+async def list_user_conversation_messages(
+    user_id: UUID,
+    conversation_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_admin: Annotated[User, Depends(require_admin)],
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> AdminMessageList:
+    """List messages for a user's conversation."""
+    messages, total = await admin_service.list_conversation_messages(
+        db,
+        target_user_id=user_id,
+        conversation_id=conversation_id,
+        limit=limit,
+        offset=offset,
+    )
+    return AdminMessageList(
+        messages=[MessageRead.model_validate(m) for m in messages],
+        total=total,
+        limit=limit,
+        offset=offset,
     )

@@ -5,6 +5,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.db.models import Conversation, Message
 from src.db.models.user import User
 from src.db.models.user_preferences import (
     CommunicationStyle,
@@ -189,3 +190,98 @@ async def test_admin_onboarding_access_denied_for_non_admin(
         headers=auth_headers,
     )
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_can_list_user_conversations(
+    client: AsyncClient,
+    admin_headers: dict[str, str],
+    db_session: AsyncSession,
+) -> None:
+    """Admin can list conversations for a user."""
+    user = User(
+        email="chatmember@example.com",
+        hashed_password="hashed",
+        full_name="Chat Member",
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    conversation_one = Conversation(
+        user_id=user.id,
+        title="Conversation One",
+        ai_provider="openai",
+        ai_model="gpt-4",
+    )
+    conversation_two = Conversation(
+        user_id=user.id,
+        title="Conversation Two",
+        ai_provider="anthropic",
+        ai_model="claude-3",
+    )
+    db_session.add_all([conversation_one, conversation_two])
+    await db_session.commit()
+
+    response = await client.get(
+        f"/admin/users/{user.id}/conversations",
+        headers=admin_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 2
+    assert len(data["conversations"]) == 2
+    titles = {conversation["title"] for conversation in data["conversations"]}
+    assert titles == {"Conversation One", "Conversation Two"}
+
+
+@pytest.mark.asyncio
+async def test_admin_can_list_user_conversation_messages(
+    client: AsyncClient,
+    admin_headers: dict[str, str],
+    db_session: AsyncSession,
+) -> None:
+    """Admin can list messages for a user's conversation."""
+    user = User(
+        email="messagemember@example.com",
+        hashed_password="hashed",
+        full_name="Message Member",
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    conversation = Conversation(
+        user_id=user.id,
+        title="Conversation Messages",
+        ai_provider="openai",
+        ai_model="gpt-4",
+    )
+    db_session.add(conversation)
+    await db_session.commit()
+    await db_session.refresh(conversation)
+
+    message_one = Message(
+        conversation_id=conversation.id,
+        role="user",
+        content="Hello",
+        tokens_used=3,
+    )
+    message_two = Message(
+        conversation_id=conversation.id,
+        role="assistant",
+        content="Hi there",
+        tokens_used=4,
+    )
+    db_session.add_all([message_one, message_two])
+    await db_session.commit()
+
+    response = await client.get(
+        f"/admin/users/{user.id}/conversations/{conversation.id}/messages",
+        headers=admin_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 2
+    assert len(data["messages"]) == 2
+    assert {message["content"] for message in data["messages"]} == {"Hello", "Hi there"}

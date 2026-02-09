@@ -5,10 +5,12 @@ from datetime import time
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.dependencies import _get_user_by_id
+from src.db.models.conversation import Conversation
+from src.db.models.message import Message
 from src.db.models.user import User
 from src.db.models.user_preferences import (
     CommunicationStyle,
@@ -171,3 +173,72 @@ async def reset_user_onboarding(
     )
 
     return profile, preferences
+
+
+async def list_user_conversations(
+    db: AsyncSession, *, target_user_id: UUID, limit: int, offset: int
+) -> tuple[list[Conversation], int]:
+    """List conversations for a user with pagination."""
+    await _get_user_or_404(db, target_user_id)
+
+    count_result = await db.execute(
+        select(func.count()).select_from(Conversation).where(Conversation.user_id == target_user_id)
+    )
+    total = int(count_result.scalar_one())
+
+    result = await db.execute(
+        select(Conversation)
+        .where(Conversation.user_id == target_user_id)
+        .order_by(desc(Conversation.updated_at))
+        .offset(offset)
+        .limit(limit)
+    )
+    conversations = list(result.scalars().all())
+    return conversations, total
+
+
+async def _get_user_conversation_or_404(
+    db: AsyncSession, *, target_user_id: UUID, conversation_id: UUID
+) -> Conversation:
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == target_user_id,
+        )
+    )
+    conversation = result.scalar_one_or_none()
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        )
+    return conversation
+
+
+async def list_conversation_messages(
+    db: AsyncSession,
+    *,
+    target_user_id: UUID,
+    conversation_id: UUID,
+    limit: int,
+    offset: int,
+) -> tuple[list[Message], int]:
+    """List messages for a user's conversation with pagination."""
+    await _get_user_or_404(db, target_user_id)
+    await _get_user_conversation_or_404(
+        db, target_user_id=target_user_id, conversation_id=conversation_id
+    )
+
+    count_result = await db.execute(
+        select(func.count()).select_from(Message).where(Message.conversation_id == conversation_id)
+    )
+    total = int(count_result.scalar_one())
+
+    result = await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(Message.created_at)
+        .offset(offset)
+        .limit(limit)
+    )
+    messages = list(result.scalars().all())
+    return messages, total
