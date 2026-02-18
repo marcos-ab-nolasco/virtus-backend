@@ -208,9 +208,7 @@ async def _get_user_conversation_or_404(
     )
     conversation = result.scalar_one_or_none()
     if not conversation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
     return conversation
 
 

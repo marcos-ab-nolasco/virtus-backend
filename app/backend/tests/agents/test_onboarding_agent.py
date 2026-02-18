@@ -266,7 +266,12 @@ class TestOnboardingProcess:
                             "id": "call_1",
                             "name": "save_user_profile",
                             "arguments": {"user_id": "test", "preferred_name": "Zé"},
-                        }
+                        },
+                        {
+                            "id": "call_2",
+                            "name": "complete_onboarding_step",
+                            "arguments": {"user_id": "test", "step": "name"},
+                        },
                     ],
                     "finish_reason": "tool_calls",
                 },
@@ -448,6 +453,17 @@ class TestOnboardingValidation:
             tool_calls_made=[],
             user_context=context,
             message="Obrigado!",
+        )
+        assert result is not None
+        assert "complete_onboarding_step" in result
+
+    def test_onboarding_validate_calendar_missing_complete(self) -> None:
+        """Calendar step without complete_onboarding_step → correction."""
+        context = get_onboarding_context(step="calendar")
+        result = self.agent.validate_tool_usage(
+            tool_calls_made=[],
+            user_context=context,
+            message="Agora não, vamos pular essa etapa.",
         )
         assert result is not None
         assert "complete_onboarding_step" in result

@@ -2,10 +2,10 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from src.schemas.chat import ConversationRead, MessageRead
 from src.schemas.user import UserRead
 from src.schemas.user_preferences import UserPreferencesResponse
 from src.schemas.user_profile import UserProfileResponse
-from src.schemas.chat import ConversationRead, MessageRead
 
 
 class AdminUserList(BaseModel):

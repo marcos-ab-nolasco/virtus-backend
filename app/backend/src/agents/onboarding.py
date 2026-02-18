@@ -9,6 +9,8 @@ The onboarding agent is responsible for:
 """
 
 import logging
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -393,57 +395,175 @@ A tool vai marcar o onboarding como COMPLETED automaticamente.
         """Validate that required tools were called for the current step."""
         current_step = self.get_current_step(user_context)
         tool_names = {tc.get("name") for tc in tool_calls_made}
+        rules = self._get_step_rules()
 
-        if current_step == "name" and len(message) > 3:
-            if "save_user_profile" not in tool_names:
-                return (
-                    "CORREÇÃO: O usuário forneceu seu nome, mas save_user_profile "
-                    "não foi chamada. Chame save_user_profile com preferred_name agora."
-                )
-
-        if current_step == "frequency":
-            freq_keywords = [
-                "raramente",
-                "às vezes",
-                "frequente",
-                "rarely",
-                "sometimes",
-                "frequently",
-                "pouco",
-                "muito",
-                "sempre",
-            ]
-            if any(kw in message.lower() for kw in freq_keywords):
-                if "save_user_preferences" not in tool_names:
-                    return (
-                        "CORREÇÃO: O usuário escolheu uma frequência, mas "
-                        "save_user_preferences não foi chamada. Chame agora."
-                    )
-
-        if current_step == "routine":
-            tz_keywords = ["fuso", "timezone", "horário", "são paulo", "brasília", "utc"]
-            work_keywords = ["freelancer", "clt", "estudante", "trabalho", "empresa", "autônomo"]
-            has_tz = any(kw in message.lower() for kw in tz_keywords)
-            has_work = any(kw in message.lower() for kw in work_keywords)
-            if has_tz and "save_user_preferences" not in tool_names:
-                return (
-                    "CORREÇÃO: O usuário forneceu timezone, mas "
-                    "save_user_preferences não foi chamada. Chame agora."
-                )
-            if has_work and "save_user_profile" not in tool_names:
-                return (
-                    "CORREÇÃO: O usuário forneceu contexto de trabalho, mas "
-                    "save_user_profile não foi chamada. Chame agora."
-                )
-
-        if current_step == "closing":
-            if "complete_onboarding_step" not in tool_names:
-                return (
-                    "CORREÇÃO: Etapa closing mas complete_onboarding_step não foi chamada. "
-                    "Chame complete_onboarding_step com step='closing' agora."
-                )
+        for rule in rules.get(current_step, []):
+            if rule.when(message, user_context) and rule.tool not in tool_names:
+                return rule.message
 
         return None
+
+    @dataclass(frozen=True)
+    class _ToolRule:
+        tool: str
+        when: Callable[[str, dict[str, Any]], bool]
+        message: str
+
+    def _get_step_rules(self) -> dict[str, list[_ToolRule]]:
+        """Central, deterministic tool requirements per onboarding step."""
+        return {
+            "intro": [
+                self._ToolRule(
+                    tool="complete_onboarding_step",
+                    when=lambda m, _c: self._is_affirmative(m),
+                    message=(
+                        "CORREÇÃO: O usuário confirmou que quer começar, mas "
+                        "complete_onboarding_step não foi chamada. "
+                        "Chame complete_onboarding_step com step='intro' agora."
+                    ),
+                ),
+            ],
+            "name": [
+                self._ToolRule(
+                    tool="save_user_profile",
+                    when=lambda m, _c: self._has_text(m),
+                    message=(
+                        "CORREÇÃO: O usuário forneceu seu nome, mas save_user_profile "
+                        "não foi chamada. Chame save_user_profile com preferred_name agora."
+                    ),
+                ),
+                self._ToolRule(
+                    tool="complete_onboarding_step",
+                    when=lambda m, _c: self._has_text(m),
+                    message=(
+                        "CORREÇÃO: Etapa name respondida, mas complete_onboarding_step "
+                        "não foi chamada. Chame complete_onboarding_step com step='name' agora."
+                    ),
+                ),
+            ],
+            "frequency": [
+                self._ToolRule(
+                    tool="save_user_preferences",
+                    when=lambda m, _c: self._has_frequency_choice(m),
+                    message=(
+                        "CORREÇÃO: O usuário escolheu uma frequência, mas "
+                        "save_user_preferences não foi chamada. Chame agora."
+                    ),
+                ),
+                self._ToolRule(
+                    tool="complete_onboarding_step",
+                    when=lambda m, _c: self._has_frequency_choice(m),
+                    message=(
+                        "CORREÇÃO: Etapa frequency respondida, mas complete_onboarding_step "
+                        "não foi chamada. Chame complete_onboarding_step com step='frequency' agora."
+                    ),
+                ),
+            ],
+            "routine": [
+                self._ToolRule(
+                    tool="save_user_preferences",
+                    when=lambda m, _c: self._has_timezone(m),
+                    message=(
+                        "CORREÇÃO: O usuário forneceu timezone, mas "
+                        "save_user_preferences não foi chamada. Chame agora."
+                    ),
+                ),
+                self._ToolRule(
+                    tool="save_user_profile",
+                    when=lambda m, _c: self._has_work_context(m),
+                    message=(
+                        "CORREÇÃO: O usuário forneceu contexto de trabalho, mas "
+                        "save_user_profile não foi chamada. Chame agora."
+                    ),
+                ),
+                self._ToolRule(
+                    tool="complete_onboarding_step",
+                    when=lambda m, _c: self._has_timezone(m) or self._has_work_context(m),
+                    message=(
+                        "CORREÇÃO: Etapa routine respondida, mas complete_onboarding_step "
+                        "não foi chamada. Chame complete_onboarding_step com step='routine' agora."
+                    ),
+                ),
+            ],
+            "goals": [
+                self._ToolRule(
+                    tool="save_user_profile",
+                    when=lambda m, _c: self._has_text(m),
+                    message=(
+                        "CORREÇÃO: O usuário respondeu sobre objetivos, mas save_user_profile "
+                        "não foi chamada. Chame save_user_profile com initial_state/initial_goals agora."
+                    ),
+                ),
+                self._ToolRule(
+                    tool="complete_onboarding_step",
+                    when=lambda m, _c: self._has_text(m),
+                    message=(
+                        "CORREÇÃO: Etapa goals respondida, mas complete_onboarding_step "
+                        "não foi chamada. Chame complete_onboarding_step com step='goals' agora."
+                    ),
+                ),
+            ],
+            "calendar": [
+                self._ToolRule(
+                    tool="complete_onboarding_step",
+                    when=lambda m, _c: self._has_calendar_decision(m),
+                    message=(
+                        "CORREÇÃO: O usuário decidiu sobre calendário, mas "
+                        "complete_onboarding_step não foi chamada. "
+                        "Chame complete_onboarding_step com step='calendar' agora."
+                    ),
+                ),
+            ],
+            "closing": [
+                self._ToolRule(
+                    tool="complete_onboarding_step",
+                    when=lambda _m, _c: True,
+                    message=(
+                        "CORREÇÃO: Etapa closing mas complete_onboarding_step não foi chamada. "
+                        "Chame complete_onboarding_step com step='closing' agora."
+                    ),
+                ),
+            ],
+        }
+
+    def _has_text(self, message: str) -> bool:
+        return bool((message or "").strip()) and len((message or "").strip()) > 2
+
+    def _has_frequency_choice(self, message: str) -> bool:
+        msg = (message or "").lower()
+        keywords = [
+            "raramente",
+            "às vezes",
+            "as vezes",
+            "frequente",
+            "rarely",
+            "sometimes",
+            "frequently",
+            "pouco",
+            "muito",
+            "sempre",
+        ]
+        return any(kw in msg for kw in keywords)
+
+    def _has_timezone(self, message: str) -> bool:
+        msg = (message or "").lower()
+        tz_keywords = ["fuso", "timezone", "horário", "sao paulo", "são paulo", "brasília", "utc"]
+        return any(kw in msg for kw in tz_keywords)
+
+    def _has_work_context(self, message: str) -> bool:
+        msg = (message or "").lower()
+        work_keywords = ["freelancer", "clt", "estudante", "trabalho", "empresa", "autônomo"]
+        return any(kw in msg for kw in work_keywords)
+
+    def _has_calendar_decision(self, message: str) -> bool:
+        msg = (message or "").lower()
+        positive = ["sim", "quero", "vamos", "conectar", "conecte", "ok", "beleza"]
+        negative = ["nao", "não", "prefiro não", "agora não", "sem", "pular", "depois"]
+        return any(kw in msg for kw in positive + negative)
+
+    def _is_affirmative(self, message: str) -> bool:
+        msg = (message or "").lower()
+        return any(kw in msg for kw in ["sim", "vamos", "bora", "ok", "beleza", "claro", "quero"])
 
     def _count_data_points(self, message: str) -> int:
         """Count distinct data categories mentioned in the message."""
