@@ -58,7 +58,9 @@ class Habit(Base):
         nullable=False,
     )
     frequency_config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    target_per_period: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    target_per_period: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
     target_unit: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     is_active: Mapped[bool] = mapped_column(
@@ -70,9 +72,7 @@ class Habit(Base):
     minimum_version: Mapped[int] = mapped_column(
         Integer, default=1, server_default="1", nullable=False
     )
-    archived_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -112,7 +112,12 @@ class HabitLog(Base):
     quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     channel: Mapped[InteractionChannel] = mapped_column(
-        Enum(InteractionChannel, native_enum=False, name="interaction_channel_enum", create_constraint=False),
+        Enum(
+            InteractionChannel,
+            native_enum=False,
+            name="interaction_channel_enum",
+            create_constraint=False,
+        ),
         default=InteractionChannel.WEB,
         server_default="WEB",
         nullable=False,

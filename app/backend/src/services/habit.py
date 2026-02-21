@@ -97,9 +97,7 @@ async def toggle_habit_log(
     await get_habit(db, user_id, habit_id)
 
     result = await db.execute(
-        select(HabitLog).where(
-            and_(HabitLog.habit_id == habit_id, HabitLog.date == data.date)
-        )
+        select(HabitLog).where(and_(HabitLog.habit_id == habit_id, HabitLog.date == data.date))
     )
     existing = result.scalar_one_or_none()
 

@@ -105,7 +105,9 @@ async def archive_habit(
     return HabitResponse.model_validate(habit)
 
 
-@router.post("/{habit_id}/logs", response_model=HabitLogResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{habit_id}/logs", response_model=HabitLogResponse, status_code=status.HTTP_201_CREATED
+)
 @limiter_authenticated.limit("30/minute")
 async def toggle_habit_log(
     request: Request,
@@ -133,10 +135,16 @@ async def list_habit_logs(
 ) -> HabitLogListResponse:
     """List habit logs with optional date range."""
     logs, total = await habit_service.list_habit_logs(
-        db, current_user.id, habit_id, start_date=start_date, end_date=end_date, skip=skip, limit=limit
+        db,
+        current_user.id,
+        habit_id,
+        start_date=start_date,
+        end_date=end_date,
+        skip=skip,
+        limit=limit,
     )
     return HabitLogListResponse(
-        logs=[HabitLogResponse.model_validate(l) for l in logs],
+        logs=[HabitLogResponse.model_validate(log) for log in logs],
         total=total,
     )
 

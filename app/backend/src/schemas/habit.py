@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from src.db.models.conversation import InteractionChannel
 from src.db.models.habit import FrequencyType
 
-
 # ===== Habit Schemas =====
 
 

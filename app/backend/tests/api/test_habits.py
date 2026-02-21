@@ -63,9 +63,7 @@ async def test_list_habits(client: AsyncClient, auth_headers: dict) -> None:
 
 @pytest.mark.asyncio
 async def test_get_habit(client: AsyncClient, auth_headers: dict) -> None:
-    create_resp = await client.post(
-        "/api/v1/me/habits", json={"name": "Ler"}, headers=auth_headers
-    )
+    create_resp = await client.post("/api/v1/me/habits", json={"name": "Ler"}, headers=auth_headers)
     habit_id = create_resp.json()["id"]
 
     response = await client.get(f"/api/v1/me/habits/{habit_id}", headers=auth_headers)

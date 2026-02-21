@@ -236,15 +236,16 @@ class TestOAuthEndpoints:
                 }
 
                 # Store state for validation
-                with patch(
-                    "src.api.oauth.oauth_states",
-                    {
-                        "test-state": {
+                with (
+                    patch(
+                        "src.api.oauth._get_oauth_state",
+                        return_value={
                             "created_at": "test",
                             "provider": "google",
                             "user_id": str(test_user.id),
-                        }
-                    },
+                        },
+                    ),
+                    patch("src.api.oauth._delete_oauth_state"),
                 ):
                     response = await client.get(
                         "/api/v1/auth/google/callback?code=test-code&state=test-state",
@@ -260,15 +261,16 @@ class TestOAuthEndpoints:
     @pytest.mark.asyncio
     async def test_oauth_callback_missing_code_returns_error(self, client, auth_headers):
         """Callback without code should return error"""
-        with patch(
-            "src.api.oauth.oauth_states",
-            {
-                "test-state": {
+        with (
+            patch(
+                "src.api.oauth._get_oauth_state",
+                return_value={
                     "created_at": "test",
                     "provider": "google",
                     "user_id": "00000000-0000-0000-0000-000000000000",
-                }
-            },
+                },
+            ),
+            patch("src.api.oauth._delete_oauth_state"),
         ):
             response = await client.get(
                 "/api/v1/auth/google/callback?state=test-state",
@@ -283,8 +285,8 @@ class TestOAuthEndpoints:
     @pytest.mark.asyncio
     async def test_oauth_callback_invalid_state_returns_error(self, client, auth_headers):
         """Callback with invalid state should return error"""
-        # State not in oauth_states dict (invalid/expired)
-        with patch("src.api.oauth.oauth_states", {}):
+        # State not found in Redis (invalid/expired)
+        with patch("src.api.oauth._get_oauth_state", return_value=None):
             response = await client.get(
                 "/api/v1/auth/google/callback?code=test&state=invalid",
                 headers=auth_headers,
@@ -357,15 +359,16 @@ class TestOAuthTokenEncryption:
                     mock_encrypt.side_effect = lambda x: f"encrypted_{x}"
 
                     # Store state for validation
-                    with patch(
-                        "src.api.oauth.oauth_states",
-                        {
-                            "test-state": {
+                    with (
+                        patch(
+                            "src.api.oauth._get_oauth_state",
+                            return_value={
                                 "created_at": "test",
                                 "provider": "google",
                                 "user_id": str(test_user.id),
-                            }
-                        },
+                            },
+                        ),
+                        patch("src.api.oauth._delete_oauth_state"),
                     ):
                         response = await client.get(
                             "/api/v1/auth/google/callback?code=test-code&state=test-state",
