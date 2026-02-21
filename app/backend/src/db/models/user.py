@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from src.db.models.calendar_event import CalendarEvent
     from src.db.models.calendar_integration import CalendarIntegration
     from src.db.models.conversation import Conversation
+    from src.db.models.habit import Habit, HabitLog
     from src.db.models.subscription import Subscription
     from src.db.models.user_preferences import UserPreferences
     from src.db.models.user_profile import UserProfile
@@ -61,6 +62,16 @@ class User(Base):
     )
     calendar_events: Mapped[list["CalendarEvent"]] = relationship(
         "CalendarEvent",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    habits: Mapped[list["Habit"]] = relationship(
+        "Habit",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    habit_logs: Mapped[list["HabitLog"]] = relationship(
+        "HabitLog",
         back_populates="user",
         cascade="all, delete-orphan",
     )
