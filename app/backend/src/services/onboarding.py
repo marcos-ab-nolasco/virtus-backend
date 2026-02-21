@@ -11,6 +11,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.db.models.subscription import Subscription, SubscriptionStatus, SubscriptionTier
 from src.db.models.user_profile import OnboardingStatus, UserProfile
 
 # Onboarding step sequence (matches OnboardingAgent's 7-step flow)
@@ -222,10 +223,21 @@ async def advance_step(db: AsyncSession, user_id: uuid.UUID) -> UserProfile:
     return profile
 
 
+async def _activate_trial_if_free(db: AsyncSession, user_id: uuid.UUID) -> None:
+    """Activate 14-day trial if user is on FREE tier. Idempotent."""
+    result = await db.execute(select(Subscription).where(Subscription.user_id == user_id))
+    subscription = result.scalar_one_or_none()
+    if subscription and subscription.tier == SubscriptionTier.FREE:
+        subscription.tier = SubscriptionTier.TRIAL
+        subscription.status = SubscriptionStatus.ACTIVE
+        subscription.trial_ends_at = datetime.now(UTC) + timedelta(days=14)
+
+
 async def complete_onboarding(db: AsyncSession, user_id: uuid.UUID) -> UserProfile:
     """Mark onboarding as completed.
 
-    Sets status to COMPLETED and sets completed_at timestamp.
+    Sets status to COMPLETED, sets completed_at timestamp,
+    and activates trial subscription if user is on FREE tier.
 
     Args:
         db: Database session
@@ -238,6 +250,8 @@ async def complete_onboarding(db: AsyncSession, user_id: uuid.UUID) -> UserProfi
 
     profile.onboarding_status = OnboardingStatus.COMPLETED
     profile.onboarding_completed_at = datetime.now(UTC)
+
+    await _activate_trial_if_free(db, user_id)
 
     await db.commit()
     await db.refresh(profile)
@@ -333,6 +347,8 @@ async def skip_onboarding(db: AsyncSession, user_id: uuid.UUID) -> UserProfile:
 
     profile.onboarding_status = OnboardingStatus.COMPLETED
     profile.onboarding_completed_at = datetime.now(UTC)
+
+    await _activate_trial_if_free(db, user_id)
 
     await db.commit()
     await db.refresh(profile)
