@@ -4,6 +4,7 @@ OAuth API endpoints
 Handles OAuth2 flow for external service integrations.
 """
 
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -13,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.cache.client import get_redis_client
 from src.core.config import get_settings
 from src.core.dependencies import get_current_user
 from src.core.encryption import encrypt_token
@@ -30,9 +32,36 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["OAuth"])
 
-# In-memory state storage (for development)
-# In production, use Redis or database
-oauth_states: dict[str, dict] = {}
+_OAUTH_STATE_PREFIX = "oauth_state"
+_OAUTH_STATE_TTL = 600  # 10 minutes
+
+
+async def _store_oauth_state(state: str, payload: dict[str, str | datetime]) -> None:
+    """Store OAuth state in Redis with TTL."""
+    client = get_redis_client()
+    key = f"{_OAUTH_STATE_PREFIX}:{state}"
+    await client.set(key, json.dumps(payload, default=str), ex=_OAUTH_STATE_TTL)
+
+
+async def _get_oauth_state(state: str) -> dict[str, str] | None:
+    """Get OAuth state from Redis."""
+    client = get_redis_client()
+    key = f"{_OAUTH_STATE_PREFIX}:{state}"
+    raw = await client.get(key)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else None
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+async def _delete_oauth_state(state: str) -> None:
+    """Delete OAuth state from Redis."""
+    client = get_redis_client()
+    key = f"{_OAUTH_STATE_PREFIX}:{state}"
+    await client.delete(key)
 
 
 def _build_redirect_url(base_url: str, params: dict[str, str]) -> str:
@@ -70,15 +99,12 @@ async def initiate_google_oauth(
     try:
         authorization_url, state = oauth_service.get_authorization_url()
 
-        # Store state temporarily (expires in 10 minutes)
-        # In production, use Redis with TTL for automatic expiration
-        oauth_states.clear()  # Simplified: clear all old states
         state_payload: dict[str, str | datetime] = {
             "created_at": datetime.now(UTC),
             "provider": "google",
+            "user_id": str(current_user.id),
         }
-        state_payload["user_id"] = str(current_user.id)
-        oauth_states[state] = state_payload
+        await _store_oauth_state(state, state_payload)
 
         logger.info(f"Initiated OAuth flow with state: {state[:8]}...")
         return OAuthInitiateResponse(
@@ -115,7 +141,8 @@ async def google_oauth_callback(
     """
     try:
         # Validate state
-        if state not in oauth_states:
+        state_data = await _get_oauth_state(state)
+        if not state_data:
             logger.error(f"Invalid or expired state: {state[:8]}...")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -123,7 +150,7 @@ async def google_oauth_callback(
             )
 
         # Remove used state
-        state_data = oauth_states.pop(state, None) or {}
+        await _delete_oauth_state(state)
         user_id_raw = state_data.get("user_id")
         if not user_id_raw:
             logger.error("OAuth state missing user_id")
