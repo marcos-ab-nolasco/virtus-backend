@@ -20,7 +20,9 @@ class TestAgentRouter:
         """Router should delegate to the agent indicated by orchestrator."""
         mock_factory = Mock()
         orchestrator = AsyncMock()
+        orchestrator.set_trace_context = Mock()
         onboarding_agent = AsyncMock()
+        onboarding_agent.set_trace_context = Mock()
 
         orchestrator.process = AsyncMock(
             return_value=AgentResponse(response=None, next_agent="onboarding")
@@ -50,6 +52,7 @@ class TestAgentRouter:
         """Router should return orchestrator response if next_agent is None."""
         mock_factory = Mock()
         orchestrator = AsyncMock()
+        orchestrator.set_trace_context = Mock()
 
         orchestrator.process = AsyncMock(
             return_value=AgentResponse(response="Resposta direta", next_agent=None)
@@ -74,7 +77,9 @@ class TestAgentRouter:
         """Router should pass conversation_history to delegated agent."""
         mock_factory = Mock()
         orchestrator = AsyncMock()
+        orchestrator.set_trace_context = Mock()
         advisor_agent = AsyncMock()
+        advisor_agent.set_trace_context = Mock()
 
         orchestrator.process = AsyncMock(
             return_value=AgentResponse(response=None, next_agent="advisor")

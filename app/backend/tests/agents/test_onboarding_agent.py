@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from src.agents.base import AgentResponse, BaseAgent
-from src.agents.onboarding import ONBOARDING_STEPS, OnboardingAgent
+from src.agents.onboarding_legacy import ONBOARDING_STEPS, OnboardingAgent
 from src.services.ai.base import BaseAIService
 from src.tools.base import ToolResult
 from src.tools.registry import ToolRegistry
@@ -67,8 +67,8 @@ class TestOnboardingAgentBasics:
         """OnboardingAgent should have required skills."""
         skills = self.agent.skills
         assert "shared/persona_base" in skills
-        assert "onboarding/onboarding_express" in skills
-        assert "onboarding/extracao_preferencias" in skills
+        assert "onboarding/onboarding_express_legacy" in skills
+        assert "onboarding/extracao_preferencias_legacy" in skills
 
     def test_onboarding_agent_has_available_tools(self) -> None:
         """OnboardingAgent should have the right tools available."""
@@ -179,7 +179,7 @@ class TestOnboardingSkillsLoading:
 
         assert len(content) > 0
         assert "Virtus" in content  # From persona_base
-        assert "INTRO" in content or "intro" in content.lower()  # From onboarding_express
+        assert "INTRO" in content or "intro" in content.lower()  # From onboarding_express_legacy
 
     def test_build_system_prompt_includes_skills(self) -> None:
         """System prompt should include skill content."""

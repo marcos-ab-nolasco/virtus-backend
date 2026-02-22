@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.db.models.user import User
 from src.db.models.user_preferences import ContactFrequency, UserPreferences
 from src.db.models.user_profile import UserProfile
-from src.tools.onboarding_tools import (
+from src.tools.onboarding_tools_legacy import (
     CompleteOnboardingStepTool,
     SaveUserPreferencesTool,
     SaveUserProfileTool,

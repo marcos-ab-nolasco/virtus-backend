@@ -273,7 +273,7 @@ class TestOnboardingServiceStepSequence:
 
     def test_onboarding_steps_match_agent_sequence(self):
         """ONBOARDING_STEPS should match the OnboardingAgent's 7-step sequence."""
-        from src.agents.onboarding import ONBOARDING_STEPS as AGENT_STEPS
+        from src.agents.onboarding_legacy import ONBOARDING_STEPS as AGENT_STEPS
         from src.services.onboarding import ONBOARDING_STEPS as SERVICE_STEPS
 
         assert SERVICE_STEPS == AGENT_STEPS

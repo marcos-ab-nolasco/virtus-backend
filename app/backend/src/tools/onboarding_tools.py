@@ -1,12 +1,14 @@
-"""Onboarding tools for the OnboardingAgent.
+"""Onboarding tools for the deep OnboardingAgent.
 
-Provides tools to save user profile data, preferences, and advance onboarding steps.
-These tools are invoked by the OnboardingAgent during the onboarding conversation.
+Provides tools to persist data collected during the 5-phase conversational
+onboarding (Wheel of Life, Ikigai, ACT, Future Self, WOOP).
 """
 
 import logging
 from typing import Any
+from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.tools.base import BaseTool, ToolResult
@@ -14,178 +16,437 @@ from src.tools.base import BaseTool, ToolResult
 logger = logging.getLogger(__name__)
 
 
-class SaveUserProfileTool(BaseTool):
-    """Save user profile data during onboarding."""
+class SaveLifeAreaScoresTool(BaseTool):
+    """Upsert Wheel-of-Life scores for one or more life areas."""
 
-    name = "save_user_profile"
+    name = "save_life_area_scores"
     description = (
-        "Save user profile information such as preferred_name and onboarding_data. "
-        "Use this to persist data extracted from the user's responses."
+        "Save or update satisfaction scores for life areas collected during Phase 1. "
+        "Pass a list of area scores; each entry is upserted by (user_id, area)."
     )
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
-            "user_id": {"type": "string", "description": "The user's ID"},
-            "preferred_name": {
-                "type": "string",
-                "description": "The name the user prefers to be called",
-            },
-            "onboarding_data": {
-                "type": "object",
-                "description": "Additional onboarding data to merge (e.g. work_context, initial_state)",
+            "user_id": {"type": "string", "description": "The user's UUID"},
+            "scores": {
+                "type": "array",
+                "description": "List of area scores to upsert",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "area": {
+                            "type": "string",
+                            "description": (
+                                "LifeArea value: HEALTH, WORK, RELATIONSHIPS, PERSONAL_TIME, "
+                                "FINANCE, PERSONAL_GROWTH, LEISURE, FREEDOM_TIME"
+                            ),
+                        },
+                        "current_score": {
+                            "type": "integer",
+                            "description": "Current satisfaction (1-10)",
+                        },
+                        "desired_score": {
+                            "type": "integer",
+                            "description": "Desired satisfaction (1-10)",
+                        },
+                        "is_priority": {
+                            "type": "boolean",
+                            "description": "Whether this area is a top priority",
+                        },
+                    },
+                    "required": ["area", "current_score", "desired_score"],
+                },
             },
         },
-        "required": ["user_id"],
+        "required": ["user_id", "scores"],
     }
 
     def __init__(self, db_session: AsyncSession) -> None:
         self._db = db_session
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
-        """Save profile data for the user."""
         try:
-            from uuid import UUID
-
-            from sqlalchemy import select
-
-            from src.db.models.user_profile import UserProfile
+            from src.db.models.planning import LifeAreaScore
 
             user_id = UUID(args["user_id"])
+            scores: list[dict[str, Any]] = args.get("scores", [])
 
-            result = await self._db.execute(
-                select(UserProfile).where(UserProfile.user_id == user_id)
-            )
-            profile = result.scalar_one_or_none()
+            if not scores:
+                return ToolResult(success=False, error="No scores provided")
 
-            if not profile:
-                return ToolResult(success=False, error="User profile not found")
+            saved = []
+            for entry in scores:
+                area = entry["area"]
 
-            if "preferred_name" in args and args["preferred_name"]:
-                profile.preferred_name = args["preferred_name"]
-
-            if "onboarding_data" in args and args["onboarding_data"]:
-                current_data = dict(profile.onboarding_data or {})
-                current_data.update(args["onboarding_data"])
-                profile.onboarding_data = current_data
-
-            await self._db.commit()
-            await self._db.refresh(profile)
-
-            logger.info(f"Saved profile data for user {user_id}")
-            return ToolResult(success=True, data={"saved": True})
-
-        except Exception as e:
-            logger.error(f"Error saving user profile: {e}", exc_info=True)
-            return ToolResult(success=False, error=str(e))
-
-
-class SaveUserPreferencesTool(BaseTool):
-    """Save user preferences during onboarding."""
-
-    name = "save_user_preferences"
-    description = (
-        "Save user preferences such as contact_frequency and timezone. "
-        "Use this to persist preference data from the onboarding conversation."
-    )
-    parameters: dict[str, Any] = {
-        "type": "object",
-        "properties": {
-            "user_id": {"type": "string", "description": "The user's ID"},
-            "contact_frequency": {
-                "type": "string",
-                "enum": ["RARELY", "SOMETIMES", "FREQUENTLY"],
-                "description": "How often the user wants to be contacted",
-            },
-            "timezone": {
-                "type": "string",
-                "description": "User's timezone (e.g. America/Sao_Paulo)",
-            },
-        },
-        "required": ["user_id"],
-    }
-
-    def __init__(self, db_session: AsyncSession) -> None:
-        self._db = db_session
-
-    async def execute(self, args: dict[str, Any]) -> ToolResult:
-        """Save preferences for the user."""
-        try:
-            from uuid import UUID
-
-            from sqlalchemy import select
-
-            from src.db.models.user_preferences import ContactFrequency, UserPreferences
-
-            user_id = UUID(args["user_id"])
-
-            result = await self._db.execute(
-                select(UserPreferences).where(UserPreferences.user_id == user_id)
-            )
-            preferences = result.scalar_one_or_none()
-
-            if not preferences:
-                return ToolResult(success=False, error="User preferences not found")
-
-            if "contact_frequency" in args and args["contact_frequency"]:
-                try:
-                    preferences.contact_frequency = ContactFrequency(args["contact_frequency"])
-                except ValueError:
-                    return ToolResult(
-                        success=False,
-                        error=f"Invalid contact_frequency: {args['contact_frequency']}",
+                result = await self._db.execute(
+                    select(LifeAreaScore).where(
+                        LifeAreaScore.user_id == user_id,
+                        LifeAreaScore.area == area,
                     )
+                )
+                record = result.scalar_one_or_none()
 
-            if "timezone" in args and args["timezone"]:
-                preferences.timezone = args["timezone"]
+                if record is None:
+                    record = LifeAreaScore(
+                        user_id=user_id,
+                        area=area,
+                        current_score=entry["current_score"],
+                        desired_score=entry["desired_score"],
+                        is_priority=entry.get("is_priority", False),
+                    )
+                    self._db.add(record)
+                else:
+                    record.current_score = entry["current_score"]
+                    record.desired_score = entry["desired_score"]
+                    record.is_priority = entry.get("is_priority", record.is_priority)
+
+                saved.append(area)
 
             await self._db.commit()
-            await self._db.refresh(preferences)
-
-            logger.info(f"Saved preferences for user {user_id}")
-            return ToolResult(success=True, data={"saved": True})
+            logger.info(f"Saved life area scores for user {user_id}: {saved}")
+            return ToolResult(success=True, data={"saved_areas": saved})
 
         except Exception as e:
-            logger.error(f"Error saving user preferences: {e}", exc_info=True)
+            logger.error(f"Error saving life area scores: {e}", exc_info=True)
             return ToolResult(success=False, error=str(e))
 
 
-class CompleteOnboardingStepTool(BaseTool):
-    """Advance the onboarding to the next step."""
+class SaveOnboardingInsightTool(BaseTool):
+    """Create or merge OnboardingInsight data for a user."""
 
-    name = "complete_onboarding_step"
+    name = "save_onboarding_insight"
     description = (
-        "Mark the current onboarding step as complete and advance to the next step. "
-        "Call this after collecting the required data for the current step."
+        "Upsert structured insight data collected during deep onboarding phases 2-4. "
+        "Only the fields provided are updated; existing fields are preserved."
     )
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
-            "user_id": {"type": "string", "description": "The user's ID"},
-            "step": {
+            "user_id": {"type": "string", "description": "The user's UUID"},
+            "energizing_activities": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Activities that energize the user (Ikigai: what you love)",
+            },
+            "recognized_skills": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Skills others recognize in the user (Ikigai: what you're good at)",
+            },
+            "market_problems": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Problems in the world the user wants to solve",
+            },
+            "top_values": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Top 3-5 personal values",
+            },
+            "value_behavior_gap": {
                 "type": "string",
-                "description": "The step being completed (e.g. 'intro', 'name', 'frequency')",
+                "description": "Gap between values and current behavior",
+            },
+            "future_self_description": {
+                "type": "string",
+                "description": "Description of ideal life in 12 months",
+            },
+            "milestone_6months": {
+                "type": "string",
+                "description": "What must be true at 6 months",
+            },
+            "milestone_3months": {
+                "type": "string",
+                "description": "What must be true at 3 months",
+            },
+            "first_step": {
+                "type": "string",
+                "description": "First concrete step toward the vision",
+            },
+            "best_outcome": {
+                "type": "string",
+                "description": "Best imaginable outcome if goals are achieved (WOOP)",
+            },
+            "internal_obstacle": {
+                "type": "string",
+                "description": "Main internal obstacle (WOOP)",
+            },
+            "if_then_plan": {
+                "type": "string",
+                "description": "Implementation intention: if [obstacle] then [action] (WOOP)",
             },
         },
-        "required": ["user_id", "step"],
+        "required": ["user_id"],
     }
 
     def __init__(self, db_session: AsyncSession) -> None:
         self._db = db_session
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
-        """Advance the onboarding step."""
         try:
-            from uuid import UUID
-
-            from src.services.onboarding import advance_step, start_onboarding
+            from src.db.models.planning import OnboardingInsight
 
             user_id = UUID(args["user_id"])
-            step = args.get("step", "")
 
-            # Ensure onboarding is started
-            from sqlalchemy import select
+            result = await self._db.execute(
+                select(OnboardingInsight).where(OnboardingInsight.user_id == user_id)
+            )
+            insight = result.scalar_one_or_none()
 
+            if insight is None:
+                insight = OnboardingInsight(user_id=user_id)
+                self._db.add(insight)
+
+            # Only update fields that were explicitly provided
+            updatable_fields = [
+                "energizing_activities",
+                "recognized_skills",
+                "market_problems",
+                "top_values",
+                "value_behavior_gap",
+                "future_self_description",
+                "milestone_6months",
+                "milestone_3months",
+                "first_step",
+                "best_outcome",
+                "internal_obstacle",
+                "if_then_plan",
+            ]
+            updated = []
+            for field in updatable_fields:
+                if field in args and args[field] is not None:
+                    setattr(insight, field, args[field])
+                    updated.append(field)
+
+            await self._db.commit()
+            logger.info(f"Saved onboarding insight for user {user_id}. Updated: {updated}")
+            return ToolResult(success=True, data={"updated_fields": updated})
+
+        except Exception as e:
+            logger.error(f"Error saving onboarding insight: {e}", exc_info=True)
+            return ToolResult(success=False, error=str(e))
+
+
+class SaveAnnualGoalTool(BaseTool):
+    """Create an annual goal linked to a life area."""
+
+    name = "save_annual_goal"
+    description = "Save an annual goal for a priority life area. Returns the created goal_id."
+    parameters: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "user_id": {"type": "string", "description": "The user's UUID"},
+            "title": {"type": "string", "description": "Goal title (concise, max 255 chars)"},
+            "life_area": {
+                "type": "string",
+                "description": (
+                    "LifeArea: HEALTH, WORK, RELATIONSHIPS, PERSONAL_TIME, "
+                    "FINANCE, PERSONAL_GROWTH, LEISURE, FREEDOM_TIME"
+                ),
+            },
+            "target_year": {
+                "type": "integer",
+                "description": "The year this goal targets (e.g. 2026)",
+            },
+            "priority": {
+                "type": "integer",
+                "description": "Ordering priority (1 = highest)",
+                "default": 1,
+            },
+            "description": {
+                "type": "string",
+                "description": "Optional longer description",
+            },
+        },
+        "required": ["user_id", "title", "life_area", "target_year"],
+    }
+
+    def __init__(self, db_session: AsyncSession) -> None:
+        self._db = db_session
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        try:
+            from src.db.models.planning import AnnualGoal
+
+            user_id = UUID(args["user_id"])
+
+            goal = AnnualGoal(
+                user_id=user_id,
+                title=args["title"],
+                life_area=args["life_area"],
+                target_year=args["target_year"],
+                priority=args.get("priority", 1),
+                description=args.get("description"),
+            )
+            self._db.add(goal)
+            await self._db.flush()  # get the generated id
+            await self._db.commit()
+
+            logger.info(f"Saved annual goal {goal.id} for user {user_id}")
+            return ToolResult(success=True, data={"goal_id": str(goal.id)})
+
+        except Exception as e:
+            logger.error(f"Error saving annual goal: {e}", exc_info=True)
+            return ToolResult(success=False, error=str(e))
+
+
+class SaveMonthlyObjectiveTool(BaseTool):
+    """Create a monthly objective, optionally linked to an annual goal."""
+
+    name = "save_monthly_objective"
+    description = (
+        "Save a monthly objective for the user. Optionally links to an annual goal. "
+        "Returns the created objective_id."
+    )
+    parameters: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "user_id": {"type": "string", "description": "The user's UUID"},
+            "description": {
+                "type": "string",
+                "description": "Objective description",
+            },
+            "annual_goal_id": {
+                "type": "string",
+                "description": "Optional UUID of the linked annual goal",
+            },
+            "is_active": {
+                "type": "boolean",
+                "description": "Whether this objective is active",
+                "default": True,
+            },
+        },
+        "required": ["user_id", "description"],
+    }
+
+    def __init__(self, db_session: AsyncSession) -> None:
+        self._db = db_session
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        try:
+            from src.db.models.planning import MonthlyObjective
+
+            user_id = UUID(args["user_id"])
+            annual_goal_id = UUID(args["annual_goal_id"]) if args.get("annual_goal_id") else None
+
+            objective = MonthlyObjective(
+                user_id=user_id,
+                description=args["description"],
+                annual_goal_id=annual_goal_id,
+                is_active=args.get("is_active", True),
+            )
+            self._db.add(objective)
+            await self._db.flush()
+            await self._db.commit()
+
+            logger.info(f"Saved monthly objective {objective.id} for user {user_id}")
+            return ToolResult(success=True, data={"objective_id": str(objective.id)})
+
+        except Exception as e:
+            logger.error(f"Error saving monthly objective: {e}", exc_info=True)
+            return ToolResult(success=False, error=str(e))
+
+
+class SaveWeeklyPriorityTool(BaseTool):
+    """Create a weekly priority objective."""
+
+    name = "save_weekly_priority"
+    description = "Save a weekly priority for the user. Returns the created priority_id."
+    parameters: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "user_id": {"type": "string", "description": "The user's UUID"},
+            "description": {
+                "type": "string",
+                "description": "Priority description",
+            },
+            "priority": {
+                "type": "string",
+                "enum": ["PRIMARY", "SECONDARY"],
+                "description": "Priority level",
+                "default": "PRIMARY",
+            },
+            "monthly_objective_id": {
+                "type": "string",
+                "description": "Optional UUID of the linked monthly objective",
+            },
+            "annual_goal_id": {
+                "type": "string",
+                "description": "Optional UUID of the linked annual goal",
+            },
+            "area": {
+                "type": "string",
+                "description": "Optional LifeArea this priority belongs to",
+            },
+        },
+        "required": ["user_id", "description"],
+    }
+
+    def __init__(self, db_session: AsyncSession) -> None:
+        self._db = db_session
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        try:
+            from src.db.models.planning import ObjectivePriority, WeeklyObjective
+
+            user_id = UUID(args["user_id"])
+            monthly_objective_id = (
+                UUID(args["monthly_objective_id"]) if args.get("monthly_objective_id") else None
+            )
+            annual_goal_id = UUID(args["annual_goal_id"]) if args.get("annual_goal_id") else None
+
+            priority_value = args.get("priority", "PRIMARY")
+            try:
+                priority = ObjectivePriority(priority_value)
+            except ValueError:
+                priority = ObjectivePriority.PRIMARY
+
+            objective = WeeklyObjective(
+                user_id=user_id,
+                description=args["description"],
+                priority=priority,
+                monthly_objective_id=monthly_objective_id,
+                annual_goal_id=annual_goal_id,
+                area=args.get("area"),
+            )
+            self._db.add(objective)
+            await self._db.flush()
+            await self._db.commit()
+
+            logger.info(f"Saved weekly priority {objective.id} for user {user_id}")
+            return ToolResult(success=True, data={"priority_id": str(objective.id)})
+
+        except Exception as e:
+            logger.error(f"Error saving weekly priority: {e}", exc_info=True)
+            return ToolResult(success=False, error=str(e))
+
+
+class AdvancePhaseTool(BaseTool):
+    """Advance the deep onboarding phase or start it if not begun."""
+
+    name = "advance_phase"
+    description = (
+        "Advance to the next onboarding phase. If NOT_STARTED, starts the deep onboarding "
+        "at phase_1. If IN_PROGRESS, moves to the next phase. At phase_5, triggers "
+        "complete_onboarding() which activates the Trial subscription."
+    )
+    parameters: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "user_id": {"type": "string", "description": "The user's UUID"},
+        },
+        "required": ["user_id"],
+    }
+
+    def __init__(self, db_session: AsyncSession) -> None:
+        self._db = db_session
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        try:
             from src.db.models.user_profile import OnboardingStatus, UserProfile
+            from src.services.onboarding import advance_phase, start_deep_onboarding
+
+            user_id = UUID(args["user_id"])
 
             result = await self._db.execute(
                 select(UserProfile).where(UserProfile.user_id == user_id)
@@ -195,27 +456,25 @@ class CompleteOnboardingStepTool(BaseTool):
             if not profile:
                 return ToolResult(success=False, error="User profile not found")
 
-            # Auto-start onboarding if not started
             if profile.onboarding_status == OnboardingStatus.NOT_STARTED:
-                await start_onboarding(self._db, user_id)
+                await start_deep_onboarding(self._db, user_id)
 
-            profile = await advance_step(self._db, user_id)
+            profile = await advance_phase(self._db, user_id)
 
             logger.info(
-                f"Completed onboarding step '{step}' for user {user_id}, "
-                f"now at: {profile.onboarding_current_step}, "
-                f"status: {profile.onboarding_status.value}"
+                f"Advanced phase for user {user_id}: "
+                f"step={profile.onboarding_current_step}, "
+                f"status={profile.onboarding_status.value}"
             )
 
             return ToolResult(
                 success=True,
                 data={
-                    "completed_step": step,
                     "current_step": profile.onboarding_current_step,
                     "status": profile.onboarding_status.value,
                 },
             )
 
         except Exception as e:
-            logger.error(f"Error completing onboarding step: {e}", exc_info=True)
+            logger.error(f"Error advancing phase: {e}", exc_info=True)
             return ToolResult(success=False, error=str(e))
