@@ -13,6 +13,13 @@ if TYPE_CHECKING:
     from src.db.models.calendar_integration import CalendarIntegration
     from src.db.models.conversation import Conversation
     from src.db.models.habit import Habit, HabitLog
+    from src.db.models.planning import (
+        AnnualGoal,
+        LifeAreaScore,
+        MonthlyObjective,
+        OnboardingInsight,
+        WeeklyObjective,
+    )
     from src.db.models.subscription import Subscription
     from src.db.models.user_preferences import UserPreferences
     from src.db.models.user_profile import UserProfile
@@ -73,6 +80,32 @@ class User(Base):
     habit_logs: Mapped[list["HabitLog"]] = relationship(
         "HabitLog",
         back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    life_area_scores: Mapped[list["LifeAreaScore"]] = relationship(
+        "LifeAreaScore",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    annual_goals: Mapped[list["AnnualGoal"]] = relationship(
+        "AnnualGoal",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    monthly_objectives: Mapped[list["MonthlyObjective"]] = relationship(
+        "MonthlyObjective",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    weekly_objectives: Mapped[list["WeeklyObjective"]] = relationship(
+        "WeeklyObjective",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    onboarding_insight: Mapped["OnboardingInsight | None"] = relationship(
+        "OnboardingInsight",
+        back_populates="user",
+        uselist=False,
         cascade="all, delete-orphan",
     )
 

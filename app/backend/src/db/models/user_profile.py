@@ -29,6 +29,10 @@ class LifeArea(enum.StrEnum):
     WORK = "WORK"
     RELATIONSHIPS = "RELATIONSHIPS"
     PERSONAL_TIME = "PERSONAL_TIME"
+    FINANCE = "FINANCE"
+    PERSONAL_GROWTH = "PERSONAL_GROWTH"
+    LEISURE = "LEISURE"
+    FREEDOM_TIME = "FREEDOM_TIME"
 
 
 class PatternType(enum.StrEnum):

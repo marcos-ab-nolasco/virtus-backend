@@ -300,7 +300,7 @@ def test_life_area_enum_values():
     assert LifeArea.WORK == "WORK"
     assert LifeArea.RELATIONSHIPS == "RELATIONSHIPS"
     assert LifeArea.PERSONAL_TIME == "PERSONAL_TIME"
-    assert len(LifeArea) == 4
+    assert len(LifeArea) == 8
 
 
 def test_pattern_type_enum_values():
