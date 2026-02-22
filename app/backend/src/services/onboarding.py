@@ -28,6 +28,18 @@ STEP_PROGRESS = {
     "closing": 85,
 }
 
+# Deep onboarding phase sequence
+ONBOARDING_PHASES = ["phase_1", "phase_2", "phase_3", "phase_4", "phase_5"]
+
+# Phase to progress percentage mapping
+PHASE_PROGRESS = {
+    "phase_1": 0,
+    "phase_2": 20,
+    "phase_3": 40,
+    "phase_4": 60,
+    "phase_5": 80,
+}
+
 
 async def _get_user_profile(db: AsyncSession, user_id: uuid.UUID) -> UserProfile:
     """Get user profile by user_id.
@@ -106,10 +118,13 @@ async def get_onboarding_state(db: AsyncSession, user_id: uuid.UUID) -> dict[str
 
     # Calculate progress percentage
     progress = 0
+    current = profile.onboarding_current_step
     if profile.onboarding_status == OnboardingStatus.COMPLETED:
         progress = 100
-    elif profile.onboarding_current_step:
-        progress = STEP_PROGRESS.get(profile.onboarding_current_step, 0)
+    elif current and current.startswith("phase_"):
+        progress = PHASE_PROGRESS.get(current, 0)
+    elif current:
+        progress = STEP_PROGRESS.get(current, 0)
 
     return {
         "status": profile.onboarding_status.value,
@@ -315,6 +330,77 @@ async def reset_onboarding(db: AsyncSession, user_id: uuid.UUID) -> UserProfile:
     profile.onboarding_current_step = None
     profile.onboarding_data = None
     profile.onboarding_completed_at = None
+
+    await db.commit()
+    await db.refresh(profile)
+
+    return profile
+
+
+async def start_deep_onboarding(db: AsyncSession, user_id: uuid.UUID) -> UserProfile:
+    """Start the deep onboarding process for a user.
+
+    Sets status to IN_PROGRESS, records started_at, and sets current_step
+    to 'phase_1'. Analogous to start_onboarding() but for the phase-based flow.
+
+    Args:
+        db: Database session
+        user_id: UUID of the user
+
+    Returns:
+        Updated UserProfile instance
+
+    Raises:
+        HTTPException: 400 if onboarding already completed, 404 if not found
+    """
+    profile = await _get_user_profile(db, user_id)
+
+    if profile.onboarding_status == OnboardingStatus.COMPLETED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Onboarding already completed for this user",
+        )
+
+    profile.onboarding_status = OnboardingStatus.IN_PROGRESS
+    profile.onboarding_started_at = datetime.now(UTC)
+    profile.onboarding_current_step = "phase_1"
+    profile.onboarding_data = {}
+
+    await db.commit()
+    await db.refresh(profile)
+
+    return profile
+
+
+async def advance_phase(db: AsyncSession, user_id: uuid.UUID) -> UserProfile:
+    """Advance to the next deep onboarding phase.
+
+    If at phase_5, triggers complete_onboarding() which activates the
+    trial subscription. Analogous to advance_step() but for ONBOARDING_PHASES.
+
+    Args:
+        db: Database session
+        user_id: UUID of the user
+
+    Returns:
+        Updated UserProfile instance
+    """
+    profile = await _get_user_profile(db, user_id)
+
+    current_phase = profile.onboarding_current_step
+
+    if current_phase is None or current_phase not in ONBOARDING_PHASES:
+        # Not in phase flow — start at phase_1
+        profile.onboarding_current_step = ONBOARDING_PHASES[0]
+    elif current_phase == "phase_5":
+        return await complete_onboarding(db, user_id)
+    else:
+        current_index = ONBOARDING_PHASES.index(current_phase)
+        next_index = current_index + 1
+        if next_index < len(ONBOARDING_PHASES):
+            profile.onboarding_current_step = ONBOARDING_PHASES[next_index]
+        else:
+            return await complete_onboarding(db, user_id)
 
     await db.commit()
     await db.refresh(profile)

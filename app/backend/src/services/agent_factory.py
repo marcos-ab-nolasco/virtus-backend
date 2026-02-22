@@ -13,9 +13,12 @@ from src.tools.examples.get_calendar_events import GetCalendarEventsTool
 from src.tools.examples.get_current_date import GetCurrentDateTool
 from src.tools.examples.get_user_preferences import GetUserPreferencesTool
 from src.tools.onboarding_tools import (
-    CompleteOnboardingStepTool,
-    SaveUserPreferencesTool,
-    SaveUserProfileTool,
+    AdvancePhaseTool,
+    SaveAnnualGoalTool,
+    SaveLifeAreaScoresTool,
+    SaveMonthlyObjectiveTool,
+    SaveOnboardingInsightTool,
+    SaveWeeklyPriorityTool,
 )
 from src.tools.registry import ToolRegistry
 
@@ -42,9 +45,12 @@ class AgentFactory:
 
         registry = ToolRegistry()
         if agent_name == "onboarding":
-            registry.register(SaveUserProfileTool(db_session=self._db))
-            registry.register(SaveUserPreferencesTool(db_session=self._db))
-            registry.register(CompleteOnboardingStepTool(db_session=self._db))
+            registry.register(SaveLifeAreaScoresTool(db_session=self._db))
+            registry.register(SaveOnboardingInsightTool(db_session=self._db))
+            registry.register(SaveAnnualGoalTool(db_session=self._db))
+            registry.register(SaveMonthlyObjectiveTool(db_session=self._db))
+            registry.register(SaveWeeklyPriorityTool(db_session=self._db))
+            registry.register(AdvancePhaseTool(db_session=self._db))
         elif agent_name == "advisor":
             registry.register(GetCurrentDateTool())
             registry.register(GetUserPreferencesTool())
