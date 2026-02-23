@@ -7,12 +7,14 @@ from fastapi import HTTPException, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.agents.base import AgentResponse
 from src.core.cache.decorator import redis_cache_decorator
 from src.db.models import Conversation, Message
 from src.schemas.chat import ConversationCreate, ConversationUpdate, MessageCreate
 from src.services.agent_factory import AgentFactory
 from src.services.agent_router import AgentRouter
 from src.services.ai import get_ai_service
+from src.services.onboarding import mark_structured_submitted
 
 logger = logging.getLogger(__name__)
 
@@ -233,6 +235,12 @@ async def create_message(
     await db.commit()
     await db.refresh(user_message)
 
+    # Pre-process structured responses before routing
+    if message_data.meta and "structured_response" in message_data.meta:
+        sr = message_data.meta["structured_response"]
+        if isinstance(sr, dict):
+            await mark_structured_submitted(db, user_id, sr.get("type", ""))
+
     messages_history = await get_conversation_messages(db, conversation_id, user_id)
     ai_messages = [{"role": msg.role, "content": msg.content} for msg in messages_history]
 
@@ -240,13 +248,13 @@ async def create_message(
 
     start_time = time.time()
     try:
-        ai_response = await _route_agent_response(
+        agent_response = await _route_agent_response(
             db, user_id, message_data.content, conversation_id, ai_messages
         )
         duration_ms = int((time.time() - start_time) * 1000)
         logger.info(
             f"AI request completed: conv_id={conversation_id} "
-            f"duration_ms={duration_ms} response_length={len(ai_response)}"
+            f"duration_ms={duration_ms} response_length={len(agent_response.response or '')}"
         )
     except HTTPException:
         raise
@@ -271,8 +279,9 @@ async def create_message(
     assistant_message = Message(
         conversation_id=conversation_id,
         role="assistant",
-        content=ai_response,
+        content=agent_response.response or "Desculpe, tive um problema.",
         tokens_used=None,
+        meta=agent_response.metadata if agent_response.metadata else None,
     )
 
     db.add(assistant_message)
@@ -305,7 +314,7 @@ async def _route_agent_response(
     message: str,
     conversation_id: UUID,
     conversation_history: list[dict[str, str]],
-) -> str:
+) -> AgentResponse:
     """Route a message through the AgentRouter.
 
     Args:
@@ -316,7 +325,7 @@ async def _route_agent_response(
         conversation_history: Previous messages in the conversation
 
     Returns:
-        Response string from the orchestrator
+        AgentResponse with response text and metadata
     """
     ai_service = get_ai_service("openai")
     context_adapter = _ContextServiceAdapter(db)

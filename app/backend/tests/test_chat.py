@@ -3,6 +3,7 @@ from httpx import AsyncClient
 from pytest_mock import MockerFixture
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.agents.base import AgentResponse
 from src.db.models import Conversation, User
 
 
@@ -199,7 +200,7 @@ async def test_create_message_generates_ai_response(
     """Creating a message should persist user + assistant responses via the orchestrator."""
     mocker.patch(
         "src.services.chat._route_agent_response",
-        return_value="AI response",
+        return_value=AgentResponse(response="AI response"),
     )
 
     create_response = await client.post(

@@ -11,6 +11,7 @@ from httpx import AsyncClient
 from pytest_mock import MockerFixture
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.agents.base import AgentResponse
 from src.db.models import Conversation, User
 
 
@@ -43,7 +44,7 @@ class TestChatAgentRouterIntegration:
         mocker: MockerFixture,
     ):
         """create_message should route through AgentRouter."""
-        mock_agent_response = "Resposta via agent router"
+        mock_agent_response = AgentResponse(response="Resposta via agent router")
 
         with patch(
             "src.services.chat._route_agent_response",
@@ -58,7 +59,7 @@ class TestChatAgentRouterIntegration:
 
             assert response.status_code == 201
             data = response.json()
-            assert data["assistant_message"]["content"] == mock_agent_response
+            assert data["assistant_message"]["content"] == mock_agent_response.response
             mock_get_response.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -74,7 +75,7 @@ class TestChatAgentRouterIntegration:
         with patch(
             "src.services.chat._route_agent_response",
             new_callable=AsyncMock,
-            return_value="Resposta via agent router",
+            return_value=AgentResponse(response="Resposta via agent router"),
         ):
             response = await client.post(
                 f"/chat/conversations/{test_conversation.id}/messages",
@@ -108,7 +109,7 @@ class TestChatAgentRouterIntegration:
         async def capture_args(db, user_id, message, conversation_id, conversation_history):
             call_args_capture["conversation_history"] = conversation_history
             call_args_capture["message"] = message
-            return "Response"
+            return AgentResponse(response="Response")
 
         with patch(
             "src.services.chat._route_agent_response",
@@ -138,7 +139,7 @@ class TestChatAgentRouterIntegration:
         with patch(
             "src.services.chat._route_agent_response",
             new_callable=AsyncMock,
-            return_value="Resposta normal do router",
+            return_value=AgentResponse(response="Resposta normal do router"),
         ):
             response = await client.post(
                 f"/chat/conversations/{test_conversation.id}/messages",

@@ -10,6 +10,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.agents.base import AgentResponse
 from src.db.models.user import User
 from src.db.models.user_profile import OnboardingStatus, UserProfile
 
@@ -56,7 +57,7 @@ class TestOnboardingChatE2E:
         with patch(
             "src.services.chat._route_agent_response",
             new_callable=AsyncMock,
-            return_value="Olá! Eu sou o Virtus, seu assistente pessoal. Vamos começar?",
+            return_value=AgentResponse(response="Olá! Eu sou o Virtus, seu assistente pessoal. Vamos começar?"),
         ):
             response = await client.post(
                 f"/chat/conversations/{chat_conversation}/messages",
@@ -90,7 +91,7 @@ class TestOnboardingChatE2E:
         with patch(
             "src.services.chat._route_agent_response",
             new_callable=AsyncMock,
-            return_value="Claro! Posso te ajudar com sua agenda.",
+            return_value=AgentResponse(response="Claro! Posso te ajudar com sua agenda."),
         ):
             response = await client.post(
                 f"/chat/conversations/{chat_conversation}/messages",

@@ -25,7 +25,7 @@ class AgentRouter:
         message: str,
         conversation_id: UUID,
         conversation_history: list[dict[str, Any]],
-    ) -> str:
+    ) -> AgentResponse:
         orchestrator = self._factory.create_orchestrator()
         orchestrator.set_trace_context(user_id=str(user_id), conversation_id=str(conversation_id))
         user_context = await orchestrator._build_context(user_id)
@@ -37,7 +37,8 @@ class AgentRouter:
         )
 
         if decision.next_agent is None:
-            return decision.response or "Desculpe, tive um problema."
+            decision.response = decision.response or "Desculpe, tive um problema."
+            return decision
 
         agent = self._factory.create_agent(decision.next_agent)
         agent.set_trace_context(user_id=str(user_id), conversation_id=str(conversation_id))
@@ -53,4 +54,5 @@ class AgentRouter:
             conversation_history=conversation_history,
         )
 
-        return agent_response.response or "Desculpe, tive um problema."
+        agent_response.response = agent_response.response or "Desculpe, tive um problema."
+        return agent_response

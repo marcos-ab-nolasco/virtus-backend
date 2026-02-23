@@ -43,7 +43,7 @@ class TestAgentRouter:
             conversation_history=[{"role": "user", "content": "Oi"}],
         )
 
-        assert response == "Resposta do onboarding"
+        assert response == AgentResponse(response="Resposta do onboarding")
         mock_factory.create_agent.assert_called_once_with("onboarding")
         onboarding_agent.process.assert_awaited_once()
 
@@ -69,7 +69,7 @@ class TestAgentRouter:
             conversation_history=[],
         )
 
-        assert response == "Resposta direta"
+        assert response == AgentResponse(response="Resposta direta", next_agent=None)
         mock_factory.create_agent.assert_not_called()
 
     @pytest.mark.asyncio
