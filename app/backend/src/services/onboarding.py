@@ -408,6 +408,32 @@ async def advance_phase(db: AsyncSession, user_id: uuid.UUID) -> UserProfile:
     return profile
 
 
+async def mark_structured_submitted(
+    db: AsyncSession, user_id: uuid.UUID, submission_type: str
+) -> None:
+    """Set a flag in onboarding_data to track which structured inputs were submitted.
+
+    Args:
+        db: Database session
+        user_id: UUID of the user
+        submission_type: Type identifier from the structured_response (e.g. "slider_grid")
+    """
+    flag_map = {
+        "slider_grid": "life_areas_submitted",
+        "chip_selector_values": "values_submitted",
+        "chip_selector_obstacles": "obstacle_submitted",
+    }
+    flag = flag_map.get(submission_type)
+    if not flag:
+        return
+
+    profile = await _get_user_profile(db, user_id)
+    data = dict(profile.onboarding_data or {})
+    data[flag] = True
+    profile.onboarding_data = data
+    await db.commit()
+
+
 async def skip_onboarding(db: AsyncSession, user_id: uuid.UUID) -> UserProfile:
     """Skip onboarding and mark as completed.
 

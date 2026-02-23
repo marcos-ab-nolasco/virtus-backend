@@ -454,3 +454,62 @@ class TestOnboardingServiceSkip:
             await skip_onboarding(db_session, test_user.id)
 
         assert exc_info.value.status_code == 400
+
+
+class TestMarkStructuredSubmitted:
+    """Unit tests for mark_structured_submitted flag tracking."""
+
+    @pytest.mark.asyncio
+    async def test_slider_grid_sets_life_areas_submitted(
+        self, db_session: AsyncSession, test_user: User
+    ):
+        """slider_grid submission should set life_areas_submitted flag."""
+        from src.services.onboarding import mark_structured_submitted, start_onboarding
+
+        await start_onboarding(db_session, test_user.id)
+        await mark_structured_submitted(db_session, test_user.id, "slider_grid")
+
+        from sqlalchemy import select
+        from src.db.models.user_profile import UserProfile
+        profile = await db_session.scalar(
+            select(UserProfile).where(UserProfile.user_id == test_user.id)
+        )
+        assert profile.onboarding_data.get("life_areas_submitted") is True
+
+    @pytest.mark.asyncio
+    async def test_chip_selector_values_sets_values_submitted(
+        self, db_session: AsyncSession, test_user: User
+    ):
+        """chip_selector_values submission should set values_submitted flag."""
+        from src.services.onboarding import mark_structured_submitted, start_onboarding
+
+        await start_onboarding(db_session, test_user.id)
+        await mark_structured_submitted(db_session, test_user.id, "chip_selector_values")
+
+        from sqlalchemy import select
+        from src.db.models.user_profile import UserProfile
+        profile = await db_session.scalar(
+            select(UserProfile).where(UserProfile.user_id == test_user.id)
+        )
+        assert profile.onboarding_data.get("values_submitted") is True
+
+    @pytest.mark.asyncio
+    async def test_unknown_type_does_nothing(
+        self, db_session: AsyncSession, test_user: User
+    ):
+        """Unknown submission_type should be silently ignored."""
+        from src.services.onboarding import mark_structured_submitted, start_onboarding
+
+        await start_onboarding(db_session, test_user.id)
+        # Should not raise
+        await mark_structured_submitted(db_session, test_user.id, "unknown_type")
+
+        from sqlalchemy import select
+        from src.db.models.user_profile import UserProfile
+        profile = await db_session.scalar(
+            select(UserProfile).where(UserProfile.user_id == test_user.id)
+        )
+        # No flags set
+        assert not profile.onboarding_data.get("life_areas_submitted")
+        assert not profile.onboarding_data.get("values_submitted")
+        assert not profile.onboarding_data.get("obstacle_submitted")
