@@ -174,3 +174,126 @@ class TestNewOnboardingAgentProcess:
         )
 
         assert response.metadata.get("current_phase") == "phase_1"
+
+
+class TestOnboardingPhaseAdvanceDetection:
+    """Test that metadata reflects the new phase when advance_phase is called during tool loop."""
+
+    def setup_method(self) -> None:
+        self.mock_llm = Mock(spec=BaseAIService)
+        self.mock_registry = Mock(spec=ToolRegistry)
+        self.mock_registry.get_tool.return_value = None
+
+        skills_path = Path(__file__).parent.parent.parent / "src" / "skills"
+        self.agent = OnboardingAgent(
+            llm_service=self.mock_llm,
+            tool_registry=self.mock_registry,
+            skills_path=skills_path,
+        )
+
+    @pytest.mark.asyncio
+    async def test_metadata_reflects_new_phase_after_advance(self) -> None:
+        """When advance_phase runs in tool loop, metadata should show the next phase."""
+        self.agent._run_tool_loop = AsyncMock(
+            return_value=AgentResponse(
+                response="Ótimo, vamos para a próxima fase!",
+                metadata={
+                    "finish_reason": "stop",
+                    "tool_rounds": 1,
+                    "tool_calls": [
+                        {"name": "advance_phase", "id": "call_1", "arguments": "{}"},
+                    ],
+                },
+            )
+        )
+
+        context = make_context(current_step="phase_1")
+        response = await self.agent.process(
+            message="Minhas notas são...",
+            user_context=context,
+            conversation_history=[],
+        )
+
+        assert response.metadata["current_phase"] == "phase_2"
+        assert response.metadata["phase_name"] == "Direção e propósito"
+
+    @pytest.mark.asyncio
+    async def test_structured_input_uses_new_phase(self) -> None:
+        """After advance from phase_1 to phase_2, structured_input should be chip_selector."""
+        self.agent._run_tool_loop = AsyncMock(
+            return_value=AgentResponse(
+                response="Agora vamos falar de valores!",
+                metadata={
+                    "finish_reason": "stop",
+                    "tool_rounds": 1,
+                    "tool_calls": [
+                        {"name": "save_life_area_scores", "id": "call_1", "arguments": "{}"},
+                        {"name": "advance_phase", "id": "call_2", "arguments": "{}"},
+                    ],
+                },
+            )
+        )
+
+        context = make_context(current_step="phase_1")
+        # life_areas_submitted=True so phase_1 slider won't show
+        context["profile"]["onboarding_data"] = {"life_areas_submitted": True}
+
+        response = await self.agent.process(
+            message="Aqui estão minhas notas",
+            user_context=context,
+            conversation_history=[],
+        )
+
+        structured = response.metadata.get("structured_input")
+        assert structured is not None
+        assert structured["type"] == "chip_selector"
+
+    @pytest.mark.asyncio
+    async def test_no_advance_keeps_same_phase(self) -> None:
+        """Without advance_phase in tool_calls, metadata keeps the original phase."""
+        self.agent._run_tool_loop = AsyncMock(
+            return_value=AgentResponse(
+                response="Me conta mais sobre isso.",
+                metadata={
+                    "finish_reason": "stop",
+                    "tool_rounds": 1,
+                    "tool_calls": [
+                        {"name": "save_onboarding_insight", "id": "call_1", "arguments": "{}"},
+                    ],
+                },
+            )
+        )
+
+        context = make_context(current_step="phase_2")
+        response = await self.agent.process(
+            message="Eu valorizo criatividade",
+            user_context=context,
+            conversation_history=[],
+        )
+
+        assert response.metadata["current_phase"] == "phase_2"
+
+    @pytest.mark.asyncio
+    async def test_advance_from_phase_5_stays(self) -> None:
+        """advance_phase from the last phase should not raise and keeps phase_5."""
+        self.agent._run_tool_loop = AsyncMock(
+            return_value=AgentResponse(
+                response="Parabéns, onboarding completo!",
+                metadata={
+                    "finish_reason": "stop",
+                    "tool_rounds": 1,
+                    "tool_calls": [
+                        {"name": "advance_phase", "id": "call_1", "arguments": "{}"},
+                    ],
+                },
+            )
+        )
+
+        context = make_context(current_step="phase_5")
+        response = await self.agent.process(
+            message="Meu plano é...",
+            user_context=context,
+            conversation_history=[],
+        )
+
+        assert response.metadata["current_phase"] == "phase_5"

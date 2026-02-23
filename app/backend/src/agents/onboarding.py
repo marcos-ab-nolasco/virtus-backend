@@ -23,6 +23,52 @@ PHASE_NAMES: dict[str, str] = {
     "phase_5": "Cristalização",
 }
 
+LIFE_AREAS_CONFIG = [
+    {"id": "HEALTH", "label": "Saúde"},
+    {"id": "WORK", "label": "Trabalho"},
+    {"id": "RELATIONSHIPS", "label": "Relacionamentos"},
+    {"id": "FINANCE", "label": "Finanças"},
+    {"id": "PERSONAL_GROWTH", "label": "Crescimento pessoal"},
+    {"id": "LEISURE", "label": "Lazer"},
+    {"id": "PERSONAL_TIME", "label": "Tempo livre"},
+    {"id": "SPIRITUALITY", "label": "Espiritualidade"},
+]
+
+VALUES_OPTIONS = [
+    {"id": "autonomia", "label": "Autonomia"},
+    {"id": "criatividade", "label": "Criatividade"},
+    {"id": "equilibrio", "label": "Equilíbrio"},
+    {"id": "familia", "label": "Família"},
+    {"id": "saude", "label": "Saúde"},
+    {"id": "impacto", "label": "Impacto"},
+    {"id": "aprendizado", "label": "Aprendizado"},
+    {"id": "integridade", "label": "Integridade"},
+    {"id": "liberdade", "label": "Liberdade"},
+    {"id": "conexao", "label": "Conexão"},
+    {"id": "reconhecimento", "label": "Reconhecimento"},
+    {"id": "proposito", "label": "Propósito"},
+    {"id": "seguranca", "label": "Segurança financeira"},
+    {"id": "lideranca", "label": "Liderança"},
+]
+
+OBSTACLE_OPTIONS = [
+    {"id": "procrastinacao", "label": "Procrastinação"},
+    {"id": "sobrecarga", "label": "Sobrecarga / muitas tarefas"},
+    {"id": "falta_clareza", "label": "Falta de clareza"},
+    {"id": "medo_falhar", "label": "Medo de falhar"},
+    {"id": "falta_disciplina", "label": "Falta de consistência"},
+    {"id": "distracoes", "label": "Distrações"},
+    {"id": "burnout", "label": "Cansaço / burnout"},
+    {"id": "perfeccionismo", "label": "Perfeccionismo"},
+    {"id": "falta_suporte", "label": "Falta de suporte"},
+]
+
+FUTURE_SELF_HINTS = [
+    "Como você se sente ao acordar de manhã?",
+    "O que você realiza profissionalmente?",
+    "Como são seus relacionamentos mais próximos?",
+]
+
 
 class OnboardingAgent(BaseAgent):
     """Agent that conducts the deep 5-phase onboarding conversation.
@@ -67,6 +113,61 @@ class OnboardingAgent(BaseAgent):
             "save_weekly_priority",
             "advance_phase",
         ]
+
+    def _determine_structured_input(
+        self, phase: str, context: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Return structured_input config for the current phase, or None if not applicable."""
+        data = (context.get("profile") or {}).get("onboarding_data") or {}
+
+        if phase == "phase_1" and not data.get("life_areas_submitted"):
+            return {
+                "type": "slider_grid",
+                "config": {
+                    "areas": LIFE_AREAS_CONFIG,
+                    "min": 1,
+                    "max": 10,
+                    "submit_label": "Confirmar avaliação",
+                },
+            }
+
+        if phase == "phase_2" and not data.get("values_submitted"):
+            return {
+                "type": "chip_selector",
+                "subtype": "chip_selector_values",
+                "config": {
+                    "options": VALUES_OPTIONS,
+                    "multi": True,
+                    "max_selections": 5,
+                    "include_other": True,
+                    "submit_label": "Confirmar valores",
+                },
+            }
+
+        if phase == "phase_3":
+            return {
+                "type": "short_prompts",
+                "config": {
+                    "placeholder": "Descreva como será sua vida em 12 meses...",
+                    "hints": FUTURE_SELF_HINTS,
+                    "hints_label": "Se travar, clique aqui",
+                    "submit_label": "Enviar",
+                },
+            }
+
+        if phase == "phase_4" and not data.get("obstacle_submitted"):
+            return {
+                "type": "chip_selector",
+                "subtype": "chip_selector_obstacles",
+                "config": {
+                    "options": OBSTACLE_OPTIONS,
+                    "multi": False,
+                    "include_other": True,
+                    "submit_label": "Confirmar obstáculo",
+                },
+            }
+
+        return None
 
     def get_current_phase(self, context: dict[str, Any]) -> str:
         """Get the current onboarding phase from context.
@@ -181,10 +282,22 @@ e conduza a conversa conforme descrito. Lembre-se:
                 max_rounds=5,
             )
 
+            # Detect advance_phase called during tool loop
+            tool_calls = response.metadata.get("tool_calls") or []
+            if any(tc.get("name") == "advance_phase" for tc in tool_calls):
+                try:
+                    idx = ONBOARDING_PHASES.index(current_phase)
+                    if idx + 1 < len(ONBOARDING_PHASES):
+                        current_phase = ONBOARDING_PHASES[idx + 1]
+                except ValueError:
+                    pass
+
+            structured_input = self._determine_structured_input(current_phase, user_context)
             response.metadata.update(
                 {
                     "current_phase": current_phase,
                     "phase_name": PHASE_NAMES.get(current_phase, current_phase),
+                    **({"structured_input": structured_input} if structured_input else {}),
                 }
             )
 
