@@ -226,7 +226,7 @@ class TestAdvancePhaseTool:
         self, db_session: AsyncSession, test_user: User
     ) -> None:
         """From phase_1, advance_phase should move to phase_2."""
-        from src.services.onboarding import start_deep_onboarding
+        from src.services.onboarding import start_deep_onboarding  # still used as fallback
 
         await start_deep_onboarding(db_session, test_user.id)
 

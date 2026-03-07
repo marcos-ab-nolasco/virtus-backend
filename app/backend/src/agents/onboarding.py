@@ -186,6 +186,9 @@ class OnboardingAgent(BaseAgent):
         """Summarise what data has already been collected so the LLM avoids re-asking."""
         profile = context.get("profile", {})
         current_phase = self.get_current_phase(context)
+        life_areas: list[dict[str, Any]] = context.get("life_areas") or []
+        deep_insights: dict[str, Any] | None = context.get("deep_insights")
+        annual_goals: list[dict[str, Any]] = context.get("annual_goals") or []
 
         lines = [
             "## Estado do Onboarding",
@@ -195,36 +198,47 @@ class OnboardingAgent(BaseAgent):
             "Dados já coletados (não repita perguntas sobre estes):",
         ]
 
-        # Check what's been saved via the raw profile / onboarding_data
-        onboarding_data = profile.get("onboarding_data") or {}
         preferred_name = profile.get("preferred_name")
-
         if preferred_name:
             lines.append(f"- Nome preferido: {preferred_name}")
 
-        # We can't query the new tables from context easily, so we flag
-        # the phase index as a proxy for what's been collected.
-        phase_idx = (
-            ONBOARDING_PHASES.index(current_phase) if current_phase in ONBOARDING_PHASES else 0
-        )
+        # Life area scores (from DB via context)
+        if life_areas:
+            areas_summary = ", ".join(
+                f"{a['area']}: {a['current']}/10 (desejado: {a['desired']})" for a in life_areas
+            )
+            lines.append(f"- Áreas de vida avaliadas: {areas_summary}")
+            priority_areas = [a["area"] for a in life_areas if a.get("priority")]
+            if priority_areas:
+                lines.append(f"- Áreas prioritárias: {', '.join(priority_areas)}")
 
-        if phase_idx >= 1:
-            lines.append("- Fase 1 concluída: scores de área de vida salvos")
-        if phase_idx >= 2:
-            lines.append("- Fase 2 concluída: atividades energizantes, habilidades, valores salvos")
-        if phase_idx >= 3:
-            lines.append("- Fase 3 concluída: visão de futuro e milestones salvos")
-        if phase_idx >= 4:
-            lines.append("- Fase 4 concluída: melhor resultado, obstáculo e plano if-then salvos")
+        # Deep insights (from DB via context)
+        if deep_insights:
+            if deep_insights.get("energizing_activities"):
+                lines.append(f"- Atividades energizantes: {deep_insights['energizing_activities']}")
+            if deep_insights.get("top_values"):
+                lines.append(f"- Valores: {deep_insights['top_values']}")
+            if deep_insights.get("future_self_description"):
+                lines.append(
+                    f"- Visão de futuro: {deep_insights['future_self_description'][:200]}..."
+                    if len(deep_insights["future_self_description"]) > 200
+                    else f"- Visão de futuro: {deep_insights['future_self_description']}"
+                )
+            if deep_insights.get("internal_obstacle"):
+                lines.append(f"- Obstáculo interno: {deep_insights['internal_obstacle']}")
+            if deep_insights.get("if_then_plan"):
+                lines.append(f"- Plano if-then: {deep_insights['if_then_plan']}")
 
-        if onboarding_data:
-            for key, value in onboarding_data.items():
-                if key != "conversation_history" and value:
-                    lines.append(f"- {key}: {value}")
+        # Annual goals
+        if annual_goals:
+            goals_summary = "; ".join(f"{g['title']} ({g['life_area']})" for g in annual_goals)
+            lines.append(f"- Objetivos anuais: {goals_summary}")
 
         return "\n".join(lines)
 
-    def _build_prompt(self, phase: str, context: dict[str, Any]) -> str:
+    def _build_prompt(
+        self, phase: str, context: dict[str, Any], is_enrichment: bool = False
+    ) -> str:
         """Build the system prompt: base skills + current phase injection."""
         base_prompt = self.build_system_prompt(context)
         state_summary = self._build_state_summary(context)
@@ -236,6 +250,20 @@ class OnboardingAgent(BaseAgent):
 
         phase_name = PHASE_NAMES.get(phase, phase)
 
+        enrichment_section = ""
+        if is_enrichment:
+            enrichment_section = """
+## Modo Enriquecimento
+
+Esta é uma REVISITA a um módulo já concluído. Siga as instruções da seção "Modo Enriquecimento"
+da skill `deep_onboarding`:
+- Reconheça os dados anteriores com naturalidade
+- Pergunte o que mudou ou o que o usuário quer aprofundar
+- NÃO refaça o módulo do zero
+- Permita refinar dados existentes via tools
+
+"""
+
         return f"""{base_prompt}
 
 ---
@@ -245,9 +273,10 @@ class OnboardingAgent(BaseAgent):
 **Fase atual**: {phase} — {phase_name}
 **Nome do usuário**: {user_name or "(ainda não definido)"}
 **User ID para tools**: {user_id}
+{"**Modo**: Enriquecimento (revisita)" if is_enrichment else ""}
 
 {state_summary}
-
+{enrichment_section}
 ## Instruções da Fase Atual
 
 Consulte a seção correspondente à fase **{phase}** nas instruções da skill `deep_onboarding`
@@ -256,7 +285,7 @@ e conduza a conversa conforme descrito. Lembre-se:
 - Empatia antes de avançar.
 - Máximo 2 perguntas por resposta (prefira 1).
 - Salve dados via tools assim que coletados.
-- Chame `advance_phase` ao concluir a fase atual.
+- Chame `advance_phase` ao concluir a fase atual (somente se NÃO for enriquecimento).
 - Responda sempre em português brasileiro.
 """
 
@@ -265,13 +294,17 @@ e conduza a conversa conforme descrito. Lembre-se:
         message: str,
         user_context: dict[str, Any],
         conversation_history: list[dict[str, Any]],
+        is_enrichment: bool = False,
     ) -> AgentResponse:
         """Process a message in the deep onboarding flow."""
         try:
             current_phase = self.get_current_phase(user_context)
-            logger.info(f"Processing deep onboarding message, phase: {current_phase}")
+            logger.info(
+                f"Processing deep onboarding message, phase: {current_phase}, "
+                f"enrichment: {is_enrichment}"
+            )
 
-            system_prompt = self._build_prompt(current_phase, user_context)
+            system_prompt = self._build_prompt(current_phase, user_context, is_enrichment)
             messages = self._build_messages(conversation_history, message)
             tool_definitions = self._get_tool_definitions()
 

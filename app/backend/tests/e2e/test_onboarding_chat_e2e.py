@@ -57,7 +57,9 @@ class TestOnboardingChatE2E:
         with patch(
             "src.services.chat._route_agent_response",
             new_callable=AsyncMock,
-            return_value=AgentResponse(response="Olá! Eu sou o Virtus, seu assistente pessoal. Vamos começar?"),
+            return_value=AgentResponse(
+                response="Olá! Eu sou o Virtus, seu assistente pessoal. Vamos começar?"
+            ),
         ):
             response = await client.post(
                 f"/chat/conversations/{chat_conversation}/messages",
@@ -111,19 +113,15 @@ class TestOnboardingChatE2E:
         auth_headers: dict[str, str],
         db_session: AsyncSession,
     ):
-        """GET /onboarding/status should reflect progress after onboarding advances."""
-        from src.services.onboarding import advance_step, start_onboarding
+        """GET /onboarding/status should reflect progress after setup completes."""
+        from src.services.onboarding import complete_setup
 
-        # Start onboarding and advance a few steps
-        await start_onboarding(db_session, test_user.id)
-        await advance_step(db_session, test_user.id)  # intro -> name
-        await advance_step(db_session, test_user.id)  # name -> frequency
+        await complete_setup(db_session, test_user.id)
 
-        # Check status endpoint
         response = await client.get("/api/v1/onboarding/status", headers=auth_headers)
 
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "IN_PROGRESS"
-        assert data["current_step"] == "frequency"
-        assert data["progress_percent"] == 28
+        assert data["status"] == "SETUP_COMPLETED"
+        assert len(data["modules"]) == 5
+        assert all(m["status"] == "not_started" for m in data["modules"])

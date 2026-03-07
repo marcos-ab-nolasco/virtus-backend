@@ -21,6 +21,9 @@ class TestAgentRouter:
         mock_factory = Mock()
         orchestrator = AsyncMock()
         orchestrator.set_trace_context = Mock()
+        orchestrator._build_context = AsyncMock(
+            return_value={"profile": {"onboarding_status": "COMPLETED"}}
+        )
         onboarding_agent = AsyncMock()
         onboarding_agent.set_trace_context = Mock()
 
@@ -53,6 +56,9 @@ class TestAgentRouter:
         mock_factory = Mock()
         orchestrator = AsyncMock()
         orchestrator.set_trace_context = Mock()
+        orchestrator._build_context = AsyncMock(
+            return_value={"profile": {"onboarding_status": "COMPLETED"}}
+        )
 
         orchestrator.process = AsyncMock(
             return_value=AgentResponse(response="Resposta direta", next_agent=None)
@@ -78,6 +84,9 @@ class TestAgentRouter:
         mock_factory = Mock()
         orchestrator = AsyncMock()
         orchestrator.set_trace_context = Mock()
+        orchestrator._build_context = AsyncMock(
+            return_value={"profile": {"onboarding_status": "COMPLETED"}}
+        )
         advisor_agent = AsyncMock()
         advisor_agent.set_trace_context = Mock()
 

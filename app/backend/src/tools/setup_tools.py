@@ -1,25 +1,28 @@
-"""Onboarding tools for the OnboardingAgent.
+"""Setup tools for the SetupAgent.
 
-Provides tools to save user profile data, preferences, and advance onboarding steps.
-These tools are invoked by the OnboardingAgent during the onboarding conversation.
+Provides tools to save user profile data, preferences, and complete the setup phase.
 """
 
 import logging
 from typing import Any
+from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
 
+ONBOARDING_PHASES = ["phase_1", "phase_2", "phase_3", "phase_4", "phase_5"]
+
 
 class SaveUserProfileTool(BaseTool):
-    """Save user profile data during onboarding."""
+    """Save user profile data (preferred_name) during setup."""
 
     name = "save_user_profile"
     description = (
-        "Save user profile information such as preferred_name and onboarding_data. "
+        "Save user profile information such as preferred_name. "
         "Use this to persist data extracted from the user's responses."
     )
     parameters: dict[str, Any] = {
@@ -30,10 +33,6 @@ class SaveUserProfileTool(BaseTool):
                 "type": "string",
                 "description": "The name the user prefers to be called",
             },
-            "onboarding_data": {
-                "type": "object",
-                "description": "Additional onboarding data to merge (e.g. work_context, initial_state)",
-            },
         },
         "required": ["user_id"],
     }
@@ -42,12 +41,7 @@ class SaveUserProfileTool(BaseTool):
         self._db = db_session
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
-        """Save profile data for the user."""
         try:
-            from uuid import UUID
-
-            from sqlalchemy import select
-
             from src.db.models.user_profile import UserProfile
 
             user_id = UUID(args["user_id"])
@@ -63,11 +57,6 @@ class SaveUserProfileTool(BaseTool):
             if "preferred_name" in args and args["preferred_name"]:
                 profile.preferred_name = args["preferred_name"]
 
-            if "onboarding_data" in args and args["onboarding_data"]:
-                current_data = dict(profile.onboarding_data or {})
-                current_data.update(args["onboarding_data"])
-                profile.onboarding_data = current_data
-
             await self._db.commit()
             await self._db.refresh(profile)
 
@@ -80,12 +69,12 @@ class SaveUserProfileTool(BaseTool):
 
 
 class SaveUserPreferencesTool(BaseTool):
-    """Save user preferences during onboarding."""
+    """Save user preferences (timezone, contact_frequency) during setup."""
 
     name = "save_user_preferences"
     description = (
         "Save user preferences such as contact_frequency and timezone. "
-        "Use this to persist preference data from the onboarding conversation."
+        "Use this to persist preference data from the setup conversation."
     )
     parameters: dict[str, Any] = {
         "type": "object",
@@ -108,12 +97,7 @@ class SaveUserPreferencesTool(BaseTool):
         self._db = db_session
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
-        """Save preferences for the user."""
         try:
-            from uuid import UUID
-
-            from sqlalchemy import select
-
             from src.db.models.user_preferences import ContactFrequency, UserPreferences
 
             user_id = UUID(args["user_id"])
@@ -149,73 +133,53 @@ class SaveUserPreferencesTool(BaseTool):
             return ToolResult(success=False, error=str(e))
 
 
-class CompleteOnboardingStepTool(BaseTool):
-    """Advance the onboarding to the next step."""
+class CompleteSetupTool(BaseTool):
+    """Complete the setup phase and initialize module structure."""
 
-    name = "complete_onboarding_step"
+    name = "complete_setup"
     description = (
-        "Mark the current onboarding step as complete and advance to the next step. "
-        "Call this after collecting the required data for the current step."
+        "Mark the setup as complete, initialize the 5 onboarding modules, "
+        "and signal whether the user wants to explore the dashboard or deepen into modules."
     )
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
-            "user_id": {"type": "string", "description": "The user's ID"},
-            "step": {
+            "user_id": {"type": "string", "description": "The user's UUID"},
+            "next_action": {
                 "type": "string",
-                "description": "The step being completed (e.g. 'intro', 'name', 'frequency')",
+                "enum": ["explore", "deepen"],
+                "description": (
+                    "What the user wants to do next: "
+                    "'explore' = go to dashboard, 'deepen' = start a module right away"
+                ),
             },
         },
-        "required": ["user_id", "step"],
+        "required": ["user_id", "next_action"],
     }
 
     def __init__(self, db_session: AsyncSession) -> None:
         self._db = db_session
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
-        """Advance the onboarding step."""
         try:
-            from uuid import UUID
-
-            from src.services.onboarding import advance_step, start_onboarding
+            from src.db.models.user_profile import OnboardingStatus
+            from src.services.onboarding import complete_setup
 
             user_id = UUID(args["user_id"])
-            step = args.get("step", "")
+            next_action = args.get("next_action", "explore")
 
-            # Ensure onboarding is started
-            from sqlalchemy import select
+            await complete_setup(self._db, user_id)
 
-            from src.db.models.user_profile import OnboardingStatus, UserProfile
-
-            result = await self._db.execute(
-                select(UserProfile).where(UserProfile.user_id == user_id)
-            )
-            profile = result.scalar_one_or_none()
-
-            if not profile:
-                return ToolResult(success=False, error="User profile not found")
-
-            # Auto-start onboarding if not started
-            if profile.onboarding_status == OnboardingStatus.NOT_STARTED:
-                await start_onboarding(self._db, user_id)
-
-            profile = await advance_step(self._db, user_id)
-
-            logger.info(
-                f"Completed onboarding step '{step}' for user {user_id}, "
-                f"now at: {profile.onboarding_current_step}, "
-                f"status: {profile.onboarding_status.value}"
-            )
+            logger.info(f"Setup completed for user {user_id}, next_action={next_action}")
 
             return ToolResult(
                 success=True,
                 data={
-                    "completed_step": step,
-                    "current_step": profile.onboarding_current_step,
-                    "status": profile.onboarding_status.value,
+                    "status": OnboardingStatus.SETUP_COMPLETED,
+                    "next_action": next_action,
                 },
             )
 
         except Exception as e:
-            logger.error(f"Error completing onboarding step: {e}", exc_info=True)
+            logger.error(f"Error completing setup: {e}", exc_info=True)
             return ToolResult(success=False, error=str(e))

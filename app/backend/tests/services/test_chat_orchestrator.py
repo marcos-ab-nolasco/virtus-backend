@@ -106,7 +106,9 @@ class TestChatAgentRouterIntegration:
         """create_message should pass conversation history to agent router."""
         call_args_capture: dict = {}
 
-        async def capture_args(db, user_id, message, conversation_id, conversation_history):
+        async def capture_args(
+            db, user_id, message, conversation_id, conversation_history, context_type=None
+        ):
             call_args_capture["conversation_history"] = conversation_history
             call_args_capture["message"] = message
             return AgentResponse(response="Response")

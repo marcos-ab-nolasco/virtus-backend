@@ -19,6 +19,7 @@ class OnboardingStatus(enum.StrEnum):
 
     NOT_STARTED = "NOT_STARTED"
     IN_PROGRESS = "IN_PROGRESS"
+    SETUP_COMPLETED = "SETUP_COMPLETED"
     COMPLETED = "COMPLETED"
 
 

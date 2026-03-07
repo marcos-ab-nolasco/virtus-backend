@@ -165,13 +165,16 @@ async def refresh(
     return Token(access_token=access_token)
 
 
-@router.post("/logout")
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
     request: Request,
     response: Response,
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> dict[str, str]:
-    """Logout user by deleting refresh session and clearing cookie."""
+) -> None:
+    """Logout user by deleting refresh session and clearing cookie.
+
+    Endpoint is intentionally idempotent: it should succeed even if the access
+    token is missing/invalid so clients can always recover local auth state.
+    """
 
     refresh_cookie = request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME)
     if refresh_cookie:
@@ -179,9 +182,7 @@ async def logout(
 
     clear_refresh_cookie(response)
 
-    logger.info("Logout successful: user_id=%s", current_user.id)
-
-    return {"message": "Successfully logged out"}
+    logger.info("Logout successful: user_id=anonymous")
 
 
 @router.get("/me", response_model=UserRead)

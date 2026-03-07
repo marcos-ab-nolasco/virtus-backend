@@ -422,13 +422,13 @@ class SaveWeeklyPriorityTool(BaseTool):
 
 
 class AdvancePhaseTool(BaseTool):
-    """Advance the deep onboarding phase or start it if not begun."""
+    """Complete the current module and advance to the next onboarding phase."""
 
     name = "advance_phase"
     description = (
-        "Advance to the next onboarding phase. If NOT_STARTED, starts the deep onboarding "
-        "at phase_1. If IN_PROGRESS, moves to the next phase. At phase_5, triggers "
-        "complete_onboarding() which activates the Trial subscription."
+        "Mark the current phase as complete and advance to the next onboarding phase. "
+        "At phase_5, triggers complete_onboarding() which activates the Trial subscription. "
+        "Also named complete_current_module — use this when the user has finished a module."
     )
     parameters: dict[str, Any] = {
         "type": "object",
@@ -444,7 +444,11 @@ class AdvancePhaseTool(BaseTool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             from src.db.models.user_profile import OnboardingStatus, UserProfile
-            from src.services.onboarding import advance_phase, start_deep_onboarding
+            from src.services.onboarding import (
+                advance_phase,
+                complete_module,
+                start_deep_onboarding,
+            )
 
             user_id = UUID(args["user_id"])
 
@@ -458,6 +462,11 @@ class AdvancePhaseTool(BaseTool):
 
             if profile.onboarding_status == OnboardingStatus.NOT_STARTED:
                 await start_deep_onboarding(self._db, user_id)
+
+            # Get current phase before advancing so we can mark it complete
+            current_phase = profile.onboarding_current_step
+            if current_phase and current_phase.startswith("phase_"):
+                await complete_module(self._db, user_id, current_phase)
 
             profile = await advance_phase(self._db, user_id)
 

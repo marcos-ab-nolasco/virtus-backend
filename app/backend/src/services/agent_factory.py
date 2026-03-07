@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.agents.advisor import AdvisorAgent
 from src.agents.onboarding import OnboardingAgent
 from src.agents.orchestrator import OrchestratorAgent
+from src.agents.setup import SetupAgent
 from src.tools.examples.get_calendar_events import GetCalendarEventsTool
 from src.tools.examples.get_current_date import GetCurrentDateTool
 from src.tools.examples.get_user_preferences import GetUserPreferencesTool
@@ -21,6 +22,7 @@ from src.tools.onboarding_tools import (
     SaveWeeklyPriorityTool,
 )
 from src.tools.registry import ToolRegistry
+from src.tools.setup_tools import CompleteSetupTool, SaveUserPreferencesTool, SaveUserProfileTool
 
 
 class AgentFactory:
@@ -44,7 +46,11 @@ class AgentFactory:
             return registry
 
         registry = ToolRegistry()
-        if agent_name == "onboarding":
+        if agent_name == "setup":
+            registry.register(SaveUserProfileTool(db_session=self._db))
+            registry.register(SaveUserPreferencesTool(db_session=self._db))
+            registry.register(CompleteSetupTool(db_session=self._db))
+        elif agent_name == "onboarding":
             registry.register(SaveLifeAreaScoresTool(db_session=self._db))
             registry.register(SaveOnboardingInsightTool(db_session=self._db))
             registry.register(SaveAnnualGoalTool(db_session=self._db))
@@ -67,7 +73,14 @@ class AgentFactory:
             context_service=self._context,
         )
 
-    def create_agent(self, agent_name: str) -> OnboardingAgent | AdvisorAgent:
+    def create_agent(self, agent_name: str) -> SetupAgent | OnboardingAgent | AdvisorAgent:
+        if agent_name == "setup":
+            registry = self._get_registry(agent_name)
+            return SetupAgent(
+                llm_service=self._llm,
+                tool_registry=registry,
+            )
+
         if agent_name == "onboarding":
             registry = self._get_registry(agent_name)
             return OnboardingAgent(

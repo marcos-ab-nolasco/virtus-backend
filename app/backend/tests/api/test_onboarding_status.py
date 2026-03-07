@@ -60,7 +60,7 @@ class TestOnboardingStatusEndpoint:
         data = response.json()
         assert data["status"] == "IN_PROGRESS"
         assert data["current_step"] == "name"
-        assert data["progress_percent"] == 14
+        assert data["progress_percent"] == 0
         assert data["started_at"] is not None
 
 

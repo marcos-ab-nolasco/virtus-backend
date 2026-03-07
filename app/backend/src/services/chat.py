@@ -221,7 +221,7 @@ async def create_message(
         HTTPException: 404 if conversation not found, 403 if not authorized
     """
     # Verify user has access to conversation
-    await get_conversation_by_id(db, conversation_id, user_id)
+    conversation = await get_conversation_by_id(db, conversation_id, user_id)
 
     user_message = Message(
         conversation_id=conversation_id,
@@ -249,7 +249,12 @@ async def create_message(
     start_time = time.time()
     try:
         agent_response = await _route_agent_response(
-            db, user_id, message_data.content, conversation_id, ai_messages
+            db,
+            user_id,
+            message_data.content,
+            conversation_id,
+            ai_messages,
+            context_type=conversation.context_type,
         )
         duration_ms = int((time.time() - start_time) * 1000)
         logger.info(
@@ -314,6 +319,7 @@ async def _route_agent_response(
     message: str,
     conversation_id: UUID,
     conversation_history: list[dict[str, str]],
+    context_type: Any = None,
 ) -> AgentResponse:
     """Route a message through the AgentRouter.
 
@@ -323,6 +329,7 @@ async def _route_agent_response(
         message: User's message content
         conversation_id: Conversation ID
         conversation_history: Previous messages in the conversation
+        context_type: ConversationContext of the conversation
 
     Returns:
         AgentResponse with response text and metadata
@@ -341,4 +348,5 @@ async def _route_agent_response(
         message=message,
         conversation_id=conversation_id,
         conversation_history=conversation_history,
+        context_type=context_type,
     )
