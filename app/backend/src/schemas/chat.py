@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.db.models.conversation import ConversationContext, InteractionChannel
+
 # ===== Conversation Schemas =====
 
 
@@ -15,6 +17,8 @@ class ConversationCreate(BaseModel):
         default="gpt-3.5-turbo", min_length=1, max_length=100
     )  # gpt-3.5-turbo-0125, gpt-4.1-mini-2025-04-14, gpt-5-nano-2025-08-07
     system_prompt: str | None = Field(default=None)
+    context_type: ConversationContext = Field(default=ConversationContext.FREE_CHAT)
+    channel: InteractionChannel = Field(default=InteractionChannel.WEB)
 
 
 class ConversationUpdate(BaseModel):
@@ -35,6 +39,8 @@ class ConversationRead(BaseModel):
     ai_provider: str
     ai_model: str
     system_prompt: str | None
+    context_type: ConversationContext
+    channel: InteractionChannel
     created_at: datetime
     updated_at: datetime
 

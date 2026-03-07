@@ -1,10 +1,12 @@
 """Context serialization service for AI agent.
 
-Builds permanent context from user profile, preferences, and integrations
-for use by the AI agent in conversations.
+Builds permanent context from user profile, preferences, integrations,
+and deep onboarding data (LifeAreaScore, OnboardingInsight, AnnualGoal).
 """
 
+import logging
 import uuid
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +15,8 @@ from src.db.models.calendar_integration import CalendarIntegration, IntegrationS
 from src.db.models.user import User
 from src.db.models.user_preferences import UserPreferences
 from src.db.models.user_profile import UserProfile
+
+logger = logging.getLogger(__name__)
 
 
 async def build_permanent_context(db: AsyncSession, user_id: uuid.UUID) -> dict:
@@ -52,6 +56,9 @@ async def build_permanent_context(db: AsyncSession, user_id: uuid.UUID) -> dict:
     )
     integrations = list(integrations_result.scalars().all())
 
+    # Load deep onboarding data (tolerant — empty is valid)
+    life_areas, onboarding_insight, annual_goals = await _load_deep_onboarding_data(db, user_id)
+
     # Build context structure
     context = {
         "user": {
@@ -62,9 +69,81 @@ async def build_permanent_context(db: AsyncSession, user_id: uuid.UUID) -> dict:
         "preferences": _build_preferences_context(preferences) if preferences else None,
         "profile": _build_profile_context(profile) if profile else None,
         "calendar_integration": _build_integration_context(integrations),
+        "life_areas": life_areas,
+        "deep_insights": onboarding_insight,
+        "annual_goals": annual_goals,
     }
 
     return context
+
+
+async def _load_deep_onboarding_data(
+    db: AsyncSession, user_id: uuid.UUID
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None, list[dict[str, Any]]]:
+    """Load LifeAreaScore, OnboardingInsight, AnnualGoal for the user.
+
+    All queries are tolerant — returns empty lists / None if no data exists.
+    """
+    life_areas: list[dict[str, Any]] = []
+    onboarding_insight: dict[str, Any] | None = None
+    annual_goals: list[dict[str, Any]] = []
+
+    try:
+        from src.db.models.planning import AnnualGoal, LifeAreaScore, OnboardingInsight
+
+        # LifeAreaScore
+        la_result = await db.execute(select(LifeAreaScore).where(LifeAreaScore.user_id == user_id))
+        for score in la_result.scalars().all():
+            life_areas.append(
+                {
+                    "area": score.area,
+                    "current": score.current_score,
+                    "desired": score.desired_score,
+                    "priority": score.is_priority,
+                }
+            )
+
+        # OnboardingInsight
+        insight_result = await db.execute(
+            select(OnboardingInsight).where(OnboardingInsight.user_id == user_id)
+        )
+        insight = insight_result.scalar_one_or_none()
+        if insight:
+            onboarding_insight = {
+                "energizing_activities": insight.energizing_activities,
+                "recognized_skills": insight.recognized_skills,
+                "market_problems": insight.market_problems,
+                "top_values": insight.top_values,
+                "value_behavior_gap": insight.value_behavior_gap,
+                "future_self_description": insight.future_self_description,
+                "milestone_6months": insight.milestone_6months,
+                "milestone_3months": insight.milestone_3months,
+                "first_step": insight.first_step,
+                "best_outcome": insight.best_outcome,
+                "internal_obstacle": insight.internal_obstacle,
+                "if_then_plan": insight.if_then_plan,
+            }
+
+        # AnnualGoal
+        goals_result = await db.execute(select(AnnualGoal).where(AnnualGoal.user_id == user_id))
+        for goal in goals_result.scalars().all():
+            annual_goals.append(
+                {
+                    "id": str(goal.id),
+                    "title": goal.title,
+                    "life_area": goal.life_area,
+                    "target_year": goal.target_year,
+                    "priority": goal.priority,
+                }
+            )
+
+    except Exception:
+        logger.debug(
+            "Deep onboarding data not available for user %s (tables may not exist yet)",
+            user_id,
+        )
+
+    return life_areas, onboarding_insight, annual_goals
 
 
 def _build_preferences_context(prefs: UserPreferences) -> dict:
@@ -73,6 +152,7 @@ def _build_preferences_context(prefs: UserPreferences) -> dict:
         "timezone": prefs.timezone,
         "language": prefs.language,
         "communication_style": prefs.communication_style.value,
+        "contact_frequency": prefs.contact_frequency.value,
         "coach_name": prefs.coach_name,
         "checkin_settings": {
             "morning_enabled": prefs.morning_checkin_enabled,
@@ -132,9 +212,12 @@ def _build_profile_context(profile: UserProfile) -> dict:
 
     return {
         "onboarding_status": profile.onboarding_status.value,
+        "onboarding_current_step": profile.onboarding_current_step,
         "onboarding_completed_at": (
             profile.onboarding_completed_at.isoformat() if profile.onboarding_completed_at else None
         ),
+        "preferred_name": profile.preferred_name,
+        "onboarding_data": profile.onboarding_data,
         "vision_5_years": profile.vision_5_years,
         "vision_5_years_themes": profile.vision_5_years_themes,
         "main_obstacle": profile.main_obstacle,

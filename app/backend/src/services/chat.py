@@ -1,15 +1,20 @@
 import logging
 import time
+from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.agents.base import AgentResponse
 from src.core.cache.decorator import redis_cache_decorator
 from src.db.models import Conversation, Message
 from src.schemas.chat import ConversationCreate, ConversationUpdate, MessageCreate
+from src.services.agent_factory import AgentFactory
+from src.services.agent_router import AgentRouter
 from src.services.ai import get_ai_service
+from src.services.onboarding import mark_structured_submitted
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +220,7 @@ async def create_message(
     Raises:
         HTTPException: 404 if conversation not found, 403 if not authorized
     """
-    # Verify user has access to conversation and get full record
+    # Verify user has access to conversation
     conversation = await get_conversation_by_id(db, conversation_id, user_id)
 
     user_message = Message(
@@ -230,33 +235,37 @@ async def create_message(
     await db.commit()
     await db.refresh(user_message)
 
+    # Pre-process structured responses before routing
+    if message_data.meta and "structured_response" in message_data.meta:
+        sr = message_data.meta["structured_response"]
+        if isinstance(sr, dict):
+            await mark_structured_submitted(db, user_id, sr.get("type", ""))
+
     messages_history = await get_conversation_messages(db, conversation_id, user_id)
     ai_messages = [{"role": msg.role, "content": msg.content} for msg in messages_history]
 
-    logger.info(
-        f"AI request started: conv_id={conversation_id} provider={conversation.ai_provider} "
-        f"model={conversation.ai_model}"
-    )
+    logger.info(f"AI request started: conv_id={conversation_id} user_id={user_id}")
 
     start_time = time.time()
     try:
-        ai_service = get_ai_service(conversation.ai_provider)
-        ai_response = await ai_service.generate_response(
+        agent_response = await _route_agent_response(
+            db,
+            user_id,
+            message_data.content,
+            conversation_id,
             ai_messages,
-            conversation.ai_model,
-            conversation.system_prompt,
+            context_type=conversation.context_type,
         )
         duration_ms = int((time.time() - start_time) * 1000)
         logger.info(
-            f"AI request completed: conv_id={conversation_id} provider={conversation.ai_provider} "
-            f"duration_ms={duration_ms} response_length={len(ai_response)}"
+            f"AI request completed: conv_id={conversation_id} "
+            f"duration_ms={duration_ms} response_length={len(agent_response.response or '')}"
         )
     except HTTPException:
         raise
     except ValueError as exc:
         logger.error(
-            f"AI request failed: conv_id={conversation_id} provider={conversation.ai_provider} "
-            f"error=ValueError: {str(exc)}"
+            f"AI request failed: conv_id={conversation_id} " f"error=ValueError: {str(exc)}"
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -264,7 +273,7 @@ async def create_message(
         ) from exc
     except Exception as exc:  # noqa: BLE001 - convert unexpected errors to HTTPException
         logger.error(
-            f"AI request failed: conv_id={conversation_id} provider={conversation.ai_provider} "
+            f"AI request failed: conv_id={conversation_id} "
             f"error={type(exc).__name__}: {str(exc)}"
         )
         raise HTTPException(
@@ -275,8 +284,9 @@ async def create_message(
     assistant_message = Message(
         conversation_id=conversation_id,
         role="assistant",
-        content=ai_response,
+        content=agent_response.response or "Desculpe, tive um problema.",
         tokens_used=None,
+        meta=agent_response.metadata if agent_response.metadata else None,
     )
 
     db.add(assistant_message)
@@ -289,3 +299,54 @@ async def create_message(
     )
 
     return user_message, assistant_message
+
+
+class _ContextServiceAdapter:
+    """Adapter that wraps a db session to provide build_permanent_context."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        self._db = db
+
+    async def build_permanent_context(self, user_id: UUID) -> dict[str, Any]:
+        from src.services.context import build_permanent_context
+
+        return await build_permanent_context(self._db, user_id)
+
+
+async def _route_agent_response(
+    db: AsyncSession,
+    user_id: UUID,
+    message: str,
+    conversation_id: UUID,
+    conversation_history: list[dict[str, str]],
+    context_type: Any = None,
+) -> AgentResponse:
+    """Route a message through the AgentRouter.
+
+    Args:
+        db: Database session
+        user_id: User ID
+        message: User's message content
+        conversation_id: Conversation ID
+        conversation_history: Previous messages in the conversation
+        context_type: ConversationContext of the conversation
+
+    Returns:
+        AgentResponse with response text and metadata
+    """
+    ai_service = get_ai_service("openai")
+    context_adapter = _ContextServiceAdapter(db)
+    factory = AgentFactory(
+        db_session=db,
+        llm_service=ai_service,
+        context_service=context_adapter,
+    )
+    router = AgentRouter(agent_factory=factory)
+
+    return await router.route(
+        user_id=user_id,
+        message=message,
+        conversation_id=conversation_id,
+        conversation_history=conversation_history,
+        context_type=context_type,
+    )

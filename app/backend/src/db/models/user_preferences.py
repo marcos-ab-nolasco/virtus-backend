@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from src.db.models.user import User
 
 
-class WeekDay(str, enum.Enum):
+class WeekDay(enum.StrEnum):
     """Days of the week for weekly review scheduling."""
 
     MONDAY = "MONDAY"
@@ -25,7 +25,7 @@ class WeekDay(str, enum.Enum):
     SUNDAY = "SUNDAY"
 
 
-class CommunicationStyle(str, enum.Enum):
+class CommunicationStyle(enum.StrEnum):
     """AI communication style preferences."""
 
     DIRECT = "DIRECT"
@@ -33,11 +33,19 @@ class CommunicationStyle(str, enum.Enum):
     MOTIVATING = "MOTIVATING"
 
 
+class ContactFrequency(enum.StrEnum):
+    """Preferred frequency of contact from the AI coach."""
+
+    RARELY = "RARELY"
+    SOMETIMES = "SOMETIMES"
+    FREQUENTLY = "FREQUENTLY"
+
+
 class UserPreferences(Base):
     """User preferences for app behavior and AI personalization.
 
-    Stores user configuration for check-ins, communication style, and scheduling.
-    Created automatically when User is created (via SQLAlchemy event).
+    Stores user configuration for check-ins, communication style, contact frequency,
+    and scheduling. Created automatically when User is created (via SQLAlchemy event).
     """
 
     __tablename__ = "user_preferences"
@@ -118,6 +126,11 @@ class UserPreferences(Base):
     coach_name: Mapped[str] = mapped_column(
         String(50),
         default="Virtus",
+        nullable=False,
+    )
+    contact_frequency: Mapped[ContactFrequency] = mapped_column(
+        Enum(ContactFrequency, native_enum=False, name="contact_frequency_enum"),
+        default=ContactFrequency.SOMETIMES,
         nullable=False,
     )
 

@@ -222,13 +222,38 @@ async def test_logout_clears_session(
     assert cookie_before is not None
 
     logout_response = await client.post("/auth/logout", headers=auth_headers)
-    assert logout_response.status_code == 200
-    assert logout_response.json()["message"] == "Successfully logged out"
+    assert logout_response.status_code == 204
 
     cookie_after = logout_response.cookies.get("refresh_token")
     assert cookie_after is None
 
     # Attempt refresh with previous cookie should fail (not automatically sent, so set manually)
+    client.cookies.set("refresh_token", cookie_before, domain="testserver", path="/")
+    refresh_response = await client.post("/auth/refresh")
+    assert refresh_response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_logout_without_valid_access_token_still_clears_refresh_session(
+    client: AsyncClient, test_user: User
+) -> None:
+    """Logout should be idempotent and succeed even with invalid access token."""
+
+    login_response = await client.post(
+        "/auth/login",
+        auth=("test@example.com", "testpassword123"),
+    )
+    assert login_response.status_code == 200
+    cookie_before = login_response.cookies.get("refresh_token")
+    assert cookie_before is not None
+
+    # Invalid bearer token must not block logout.
+    logout_response = await client.post(
+        "/auth/logout",
+        headers={"Authorization": "Bearer invalid-token"},
+    )
+    assert logout_response.status_code == 204
+
     client.cookies.set("refresh_token", cookie_before, domain="testserver", path="/")
     refresh_response = await client.post("/auth/refresh")
     assert refresh_response.status_code == 401

@@ -11,6 +11,7 @@ from src.api import (
     auth,
     calendar,
     chat,
+    habits,
     oauth,
     onboarding,
     preferences,
@@ -66,6 +67,7 @@ app.include_router(preferences.router, prefix="/api/v1")
 app.include_router(subscription.router, prefix="/api/v1")
 app.include_router(calendar.router, prefix="/api/v1")
 app.include_router(onboarding.router, prefix="/api/v1")
+app.include_router(habits.router, prefix="/api/v1")
 
 
 @app.get("/health_check")

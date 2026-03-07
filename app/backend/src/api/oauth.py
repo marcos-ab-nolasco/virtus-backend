@@ -4,12 +4,17 @@ OAuth API endpoints
 Handles OAuth2 flow for external service integrations.
 """
 
+import json
 import logging
 from datetime import UTC, datetime, timedelta
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.cache.client import get_redis_client
 from src.core.config import get_settings
 from src.core.dependencies import get_current_user
 from src.core.encryption import encrypt_token
@@ -20,16 +25,52 @@ from src.db.models.calendar_integration import (
 )
 from src.db.models.user import User
 from src.db.session import get_db
-from src.schemas.oauth import CalendarIntegrationCreateResponse, OAuthInitiateResponse
+from src.schemas.oauth import OAuthInitiateResponse
 from src.services.oauth_google import GoogleOAuthService, OAuthError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["OAuth"])
 
-# In-memory state storage (for development)
-# In production, use Redis or database
-oauth_states: dict[str, dict] = {}
+_OAUTH_STATE_PREFIX = "oauth_state"
+_OAUTH_STATE_TTL = 600  # 10 minutes
+
+
+async def _store_oauth_state(state: str, payload: dict[str, str | datetime]) -> None:
+    """Store OAuth state in Redis with TTL."""
+    client = get_redis_client()
+    key = f"{_OAUTH_STATE_PREFIX}:{state}"
+    await client.set(key, json.dumps(payload, default=str), ex=_OAUTH_STATE_TTL)
+
+
+async def _get_oauth_state(state: str) -> dict[str, str] | None:
+    """Get OAuth state from Redis."""
+    client = get_redis_client()
+    key = f"{_OAUTH_STATE_PREFIX}:{state}"
+    raw = await client.get(key)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else None
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+async def _delete_oauth_state(state: str) -> None:
+    """Delete OAuth state from Redis."""
+    client = get_redis_client()
+    key = f"{_OAUTH_STATE_PREFIX}:{state}"
+    await client.delete(key)
+
+
+def _build_redirect_url(base_url: str, params: dict[str, str]) -> str:
+    """Append query params to a base URL, preserving existing params."""
+    parsed = urlparse(base_url)
+    query = dict(parse_qsl(parsed.query))
+    query.update({key: value for key, value in params.items() if value})
+    updated_query = urlencode(query)
+    return urlunparse(parsed._replace(query=updated_query))
 
 
 def get_google_oauth_service() -> GoogleOAuthService:
@@ -47,6 +88,7 @@ def get_google_oauth_service() -> GoogleOAuthService:
 @router.get("/google", response_model=OAuthInitiateResponse)
 async def initiate_google_oauth(
     oauth_service: GoogleOAuthService = Depends(get_google_oauth_service),
+    current_user: User = Depends(get_current_user),
 ) -> OAuthInitiateResponse:
     """
     Initiate Google OAuth flow
@@ -57,13 +99,12 @@ async def initiate_google_oauth(
     try:
         authorization_url, state = oauth_service.get_authorization_url()
 
-        # Store state temporarily (expires in 10 minutes)
-        # In production, use Redis with TTL for automatic expiration
-        oauth_states.clear()  # Simplified: clear all old states
-        oauth_states[state] = {
+        state_payload: dict[str, str | datetime] = {
             "created_at": datetime.now(UTC),
             "provider": "google",
+            "user_id": str(current_user.id),
         }
+        await _store_oauth_state(state, state_payload)
 
         logger.info(f"Initiated OAuth flow with state: {state[:8]}...")
         return OAuthInitiateResponse(
@@ -79,14 +120,20 @@ async def initiate_google_oauth(
         ) from e
 
 
-@router.get("/google/callback", response_model=CalendarIntegrationCreateResponse)
+@router.get(
+    "/google/callback",
+    response_class=RedirectResponse,
+    response_model=None,
+    status_code=status.HTTP_303_SEE_OTHER,
+)
 async def google_oauth_callback(
-    code: str = Query(..., description="Authorization code from Google"),
+    code: str | None = Query(None, description="Authorization code from Google"),
     state: str = Query(..., description="State parameter for validation"),
-    current_user: User = Depends(get_current_user),
+    error: str | None = Query(None, description="OAuth error from Google"),
+    error_description: str | None = Query(None, description="OAuth error description"),
     db: AsyncSession = Depends(get_db),
     oauth_service: GoogleOAuthService = Depends(get_google_oauth_service),
-) -> CalendarIntegrationCreateResponse:
+) -> RedirectResponse:
     """
     Handle Google OAuth callback
 
@@ -94,7 +141,8 @@ async def google_oauth_callback(
     """
     try:
         # Validate state
-        if state not in oauth_states:
+        state_data = await _get_oauth_state(state)
+        if not state_data:
             logger.error(f"Invalid or expired state: {state[:8]}...")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -102,10 +150,44 @@ async def google_oauth_callback(
             )
 
         # Remove used state
-        oauth_states.pop(state, None)
+        await _delete_oauth_state(state)
+        user_id_raw = state_data.get("user_id")
+        if not user_id_raw:
+            logger.error("OAuth state missing user_id")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid OAuth state",
+            )
+
+        try:
+            user_id = UUID(user_id_raw)
+        except (ValueError, TypeError) as e:
+            logger.error("OAuth state user_id invalid: %s", user_id_raw)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid OAuth state",
+            ) from e
 
         # Exchange code for tokens
-        logger.info(f"Exchanging code for tokens for user: {current_user.id}")
+        if error:
+            logger.info(
+                "OAuth callback returned error: %s description=%s user_id=%s",
+                error,
+                error_description,
+                user_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error,
+            )
+
+        if not code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Missing authorization code",
+            )
+
+        logger.info(f"Exchanging code for tokens for user: {user_id}")
         tokens = await oauth_service.exchange_code_for_tokens(code, state)
 
         # Get user info from Google
@@ -124,7 +206,7 @@ async def google_oauth_callback(
 
         # Create or update calendar integration
         integration = CalendarIntegration(
-            user_id=current_user.id,
+            user_id=user_id,
             provider=CalendarProvider.GOOGLE_CALENDAR,
             access_token=encrypted_access_token,
             refresh_token=encrypted_refresh_token,
@@ -137,27 +219,59 @@ async def google_oauth_callback(
         await db.commit()
         await db.refresh(integration)
 
-        logger.info(f"Created calendar integration {integration.id} for user {current_user.id}")
+        # logger.info(f"Created calendar integration {integration.id} for user {current_user.id}")
 
-        return CalendarIntegrationCreateResponse(
-            message="Successfully connected Google Calendar",
-            integration_id=str(integration.id),
-            provider=integration.provider.value,
-            status=integration.status.value,
+        settings = get_settings()
+        redirect_url = _build_redirect_url(
+            settings.FRONTEND_OAUTH_REDIRECT_URL,
+            {
+                "status": "connected",
+                "provider": integration.provider.value.lower(),
+                "integration_id": str(integration.id),
+            },
         )
+        return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
 
-    except HTTPException:
-        # Re-raise HTTPException without catching (FastAPI handles it)
-        raise
+    except HTTPException as e:
+        settings = get_settings()
+        reason = "oauth_failed"
+        if e.status_code == status.HTTP_400_BAD_REQUEST:
+            if e.detail in {"Invalid or expired OAuth state", "Invalid OAuth state"}:
+                reason = "invalid_state"
+            elif e.detail == "access_denied":
+                reason = "access_denied"
+            elif e.detail == "Failed to complete OAuth flow":
+                reason = "internal_error"
+        redirect_url = _build_redirect_url(
+            settings.FRONTEND_OAUTH_REDIRECT_URL,
+            {
+                "status": "failed",
+                "provider": "google",
+                "reason": reason,
+            },
+        )
+        return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
     except OAuthError as e:
         logger.error(f"OAuth error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        settings = get_settings()
+        redirect_url = _build_redirect_url(
+            settings.FRONTEND_OAUTH_REDIRECT_URL,
+            {
+                "status": "failed",
+                "provider": "google",
+                "reason": "oauth_error",
+            },
+        )
+        return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
     except Exception as e:
         logger.error(f"Error in OAuth callback: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to complete OAuth flow",
-        ) from e
+        settings = get_settings()
+        redirect_url = _build_redirect_url(
+            settings.FRONTEND_OAUTH_REDIRECT_URL,
+            {
+                "status": "failed",
+                "provider": "google",
+                "reason": "internal_error",
+            },
+        )
+        return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)

@@ -86,6 +86,25 @@ class AnthropicService(BaseAIService):
 
         return content
 
+    async def generate_response_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        system_prompt: str,
+        tools: list[dict[str, Any]],
+        tool_choice: str = "auto",
+        model: str = "gpt-4o-mini",
+    ) -> dict[str, Any]:
+        """
+        Tool support not yet implemented for Anthropic.
+
+        Raises:
+            NotImplementedError: Always, as this feature is not implemented
+        """
+        raise NotImplementedError(
+            "Function calling not yet implemented for Anthropic service. "
+            "Use OpenAI service for agents that require tools."
+        )
+
     @staticmethod
     def _build_payload(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Transform conversation history into Anthropic-compatible payload."""

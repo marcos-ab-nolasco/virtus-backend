@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str | None = None
     GOOGLE_CLIENT_SECRET: str | None = None
     GOOGLE_REDIRECT_URI: str | None = None
+    FRONTEND_OAUTH_REDIRECT_URL: str
 
     @property
     def cors_origins_list(self) -> list[str]:

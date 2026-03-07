@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from src.db.models.user import User
 
 
-class SubscriptionTier(str, enum.Enum):
+class SubscriptionTier(enum.StrEnum):
     """Subscription tier levels with hierarchical ordering."""
 
     FREE = "FREE"
@@ -57,7 +57,7 @@ class SubscriptionTier(str, enum.Enum):
         return _TIER_ORDER[self] > _TIER_ORDER[other_tier]
 
 
-class SubscriptionStatus(str, enum.Enum):
+class SubscriptionStatus(enum.StrEnum):
     """Subscription status states."""
 
     ACTIVE = "ACTIVE"

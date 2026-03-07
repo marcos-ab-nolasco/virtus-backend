@@ -14,24 +14,29 @@ if TYPE_CHECKING:
     from src.db.models.user import User
 
 
-class OnboardingStatus(str, enum.Enum):
+class OnboardingStatus(enum.StrEnum):
     """Onboarding workflow states."""
 
     NOT_STARTED = "NOT_STARTED"
     IN_PROGRESS = "IN_PROGRESS"
+    SETUP_COMPLETED = "SETUP_COMPLETED"
     COMPLETED = "COMPLETED"
 
 
-class LifeArea(str, enum.Enum):
+class LifeArea(enum.StrEnum):
     """Life areas for objectives and satisfaction tracking."""
 
     HEALTH = "HEALTH"
     WORK = "WORK"
     RELATIONSHIPS = "RELATIONSHIPS"
     PERSONAL_TIME = "PERSONAL_TIME"
+    FINANCE = "FINANCE"
+    PERSONAL_GROWTH = "PERSONAL_GROWTH"
+    LEISURE = "LEISURE"
+    FREEDOM_TIME = "FREEDOM_TIME"
 
 
-class PatternType(str, enum.Enum):
+class PatternType(enum.StrEnum):
     """Types of observed behavioral patterns."""
 
     ENERGY = "ENERGY"
@@ -40,7 +45,7 @@ class PatternType(str, enum.Enum):
     COMMUNICATION = "COMMUNICATION"
 
 
-class StrengthCategory(str, enum.Enum):
+class StrengthCategory(enum.StrEnum):
     """Categories of personal strengths."""
 
     TECHNICAL = "TECHNICAL"
@@ -50,14 +55,14 @@ class StrengthCategory(str, enum.Enum):
     ORGANIZATIONAL = "ORGANIZATIONAL"
 
 
-class StrengthSource(str, enum.Enum):
+class StrengthSource(enum.StrEnum):
     """Source of strength identification."""
 
     DECLARED = "DECLARED"
     INFERRED = "INFERRED"
 
 
-class InterestType(str, enum.Enum):
+class InterestType(enum.StrEnum):
     """Types of interests."""
 
     HOBBY = "HOBBY"
@@ -66,7 +71,7 @@ class InterestType(str, enum.Enum):
     CURIOSITY = "CURIOSITY"
 
 
-class EngagementLevel(str, enum.Enum):
+class EngagementLevel(enum.StrEnum):
     """Level of engagement with an interest."""
 
     ACTIVE = "ACTIVE"
@@ -122,6 +127,13 @@ class UserProfile(Base):
         JSONB,
         nullable=True,
         comment="Partial onboarding data (name, goals, preferences, conversation_history)",
+    )
+
+    # User identity
+    preferred_name: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="Como o usuário prefere ser chamado (ex: 'Má', 'Capitão')",
     )
 
     # Timestamps
