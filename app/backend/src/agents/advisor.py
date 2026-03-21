@@ -33,6 +33,10 @@ class AdvisorAgent(BaseAgent):
             "shared/tom_ajuste",
             "shared/contexto_usuario",
             "advisor/conversacao_livre",
+            "advisor/metodologias",
+            "advisor/geracao_insights",
+            "advisor/reflexao_profunda",
+            "advisor/suporte_decisao",
         ]
 
     @property
@@ -41,4 +45,7 @@ class AdvisorAgent(BaseAgent):
             "get_current_date",
             "get_user_preferences",
             "get_calendar_events",
+            "get_user_full_history",
+            "get_observed_patterns",
+            "get_inferred_values",
         ]
