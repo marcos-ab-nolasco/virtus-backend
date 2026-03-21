@@ -58,9 +58,7 @@ class GetObservedPatternsTool(BaseTool):
 
             session_factory = get_async_sessionmaker()
             async with session_factory() as db:
-                result = await db.execute(
-                    select(UserProfile).where(UserProfile.user_id == user_id)
-                )
+                result = await db.execute(select(UserProfile).where(UserProfile.user_id == user_id))
                 profile = result.scalar_one_or_none()
 
                 if profile is None or profile.observed_patterns is None:

@@ -43,9 +43,11 @@ async def list_habits(
     return [
         HabitResponse.model_validate(h).model_copy(
             update={
-                "today_log": HabitLogResponse.model_validate(today_log_map[h.id])
-                if h.id in today_log_map
-                else None
+                "today_log": (
+                    HabitLogResponse.model_validate(today_log_map[h.id])
+                    if h.id in today_log_map
+                    else None
+                )
             }
         )
         for h in habits

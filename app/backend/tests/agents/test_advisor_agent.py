@@ -115,7 +115,10 @@ class TestAdvisorNewTools:
         mock_factory = MagicMock()
         mock_factory.return_value = mock_session
 
-        with patch("src.tools.advisor.get_user_full_history.get_async_sessionmaker", return_value=mock_factory):
+        with patch(
+            "src.tools.advisor.get_user_full_history.get_async_sessionmaker",
+            return_value=mock_factory,
+        ):
             result = await tool.execute({"user_id": user_id})
 
         assert result.success is True
@@ -143,7 +146,10 @@ class TestAdvisorNewTools:
         mock_factory = MagicMock()
         mock_factory.return_value = mock_session
 
-        with patch("src.tools.advisor.get_observed_patterns.get_async_sessionmaker", return_value=mock_factory):
+        with patch(
+            "src.tools.advisor.get_observed_patterns.get_async_sessionmaker",
+            return_value=mock_factory,
+        ):
             result = await tool.execute({"user_id": user_id})
 
         assert result.success is True
@@ -167,14 +173,15 @@ class TestAdvisorNewTools:
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=None)
-        mock_session.execute = AsyncMock(
-            side_effect=[mock_insight_result, mock_profile_result]
-        )
+        mock_session.execute = AsyncMock(side_effect=[mock_insight_result, mock_profile_result])
 
         mock_factory = MagicMock()
         mock_factory.return_value = mock_session
 
-        with patch("src.tools.advisor.get_inferred_values.get_async_sessionmaker", return_value=mock_factory):
+        with patch(
+            "src.tools.advisor.get_inferred_values.get_async_sessionmaker",
+            return_value=mock_factory,
+        ):
             result = await tool.execute({"user_id": user_id})
 
         assert result.success is True

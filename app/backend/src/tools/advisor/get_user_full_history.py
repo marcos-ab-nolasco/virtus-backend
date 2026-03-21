@@ -117,8 +117,10 @@ class GetUserFullHistoryTool(BaseTool):
                     select(UserProfile).where(UserProfile.user_id == user_id)
                 )
                 profile = profile_result.scalar_one_or_none()
-                strengths = profile.strengths or [] if profile else []
-                interests = profile.interests or [] if profile else []
+                raw_strengths: Any = profile.strengths if profile else None
+                raw_interests: Any = profile.interests if profile else None
+                strengths: list[Any] = raw_strengths or []
+                interests: list[Any] = raw_interests or []
 
             return ToolResult(
                 success=True,
