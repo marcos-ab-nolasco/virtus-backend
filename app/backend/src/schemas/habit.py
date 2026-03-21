@@ -61,6 +61,7 @@ class HabitResponse(BaseModel):
     archived_at: dt.datetime | None
     created_at: dt.datetime
     updated_at: dt.datetime
+    today_log: HabitLogResponse | None = None
 
 
 # ===== HabitLog Schemas =====

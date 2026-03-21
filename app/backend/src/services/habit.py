@@ -35,6 +35,25 @@ async def list_habits(
     return list(result.scalars().all())
 
 
+async def get_today_log_map(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    habit_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, HabitLog]:
+    """Return a {habit_id → HabitLog} map for today's logs. Single query."""
+    if not habit_ids:
+        return {}
+    today = date.today()
+    result = await db.execute(
+        select(HabitLog).where(
+            HabitLog.user_id == user_id,
+            HabitLog.date == today,
+            HabitLog.habit_id.in_(habit_ids),
+        )
+    )
+    return {log.habit_id: log for log in result.scalars()}
+
+
 async def get_habit(db: AsyncSession, user_id: uuid.UUID, habit_id: uuid.UUID) -> Habit:
     """Get a single habit, ensuring ownership."""
     result = await db.execute(
