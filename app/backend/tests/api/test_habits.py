@@ -239,6 +239,49 @@ async def test_habit_stats(client: AsyncClient, auth_headers: dict) -> None:
     assert len(data["heatmap"]) == 90
 
 
+# ===== Today Log =====
+
+
+@pytest.mark.asyncio
+async def test_list_habits_includes_today_log(client: AsyncClient, auth_headers: dict) -> None:
+    create_resp = await client.post(
+        "/api/v1/me/habits", json={"name": "Today Log Test"}, headers=auth_headers
+    )
+    assert create_resp.status_code == 201
+    habit_id = create_resp.json()["id"]
+    today = date.today().isoformat()
+
+    log_resp = await client.post(
+        f"/api/v1/me/habits/{habit_id}/logs",
+        json={"date": today, "completed": True},
+        headers=auth_headers,
+    )
+    assert log_resp.status_code == 201
+
+    list_resp = await client.get("/api/v1/me/habits", headers=auth_headers)
+    assert list_resp.status_code == 200
+    habits = list_resp.json()
+    habit = next(h for h in habits if h["id"] == habit_id)
+    assert habit["today_log"] is not None
+    assert habit["today_log"]["completed"] is True
+    assert habit["today_log"]["date"] == today
+
+
+@pytest.mark.asyncio
+async def test_list_habits_today_log_none_when_not_logged(
+    client: AsyncClient, auth_headers: dict
+) -> None:
+    await client.post("/api/v1/me/habits", json={"name": "No Log Habit"}, headers=auth_headers)
+
+    list_resp = await client.get("/api/v1/me/habits", headers=auth_headers)
+    assert list_resp.status_code == 200
+    habits = list_resp.json()
+    for habit in habits:
+        # Habit without a log today should have today_log=None
+        if habit["name"] == "No Log Habit":
+            assert habit["today_log"] is None
+
+
 # ===== Auth =====
 
 
