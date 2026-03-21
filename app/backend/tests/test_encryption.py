@@ -76,7 +76,9 @@ def test_decrypt_tampered_token_raises_error():
 
     # Tamper with the encrypted token (change a character)
     if len(encrypted) > 10:
-        tampered = encrypted[:10] + "X" + encrypted[11:]
+        original_char = encrypted[10]
+        replacement = "A" if original_char != "A" else "B"
+        tampered = encrypted[:10] + replacement + encrypted[11:]
 
         with pytest.raises(InvalidToken):
             decrypt_token(tampered)
