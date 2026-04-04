@@ -10,6 +10,9 @@ from src.agents.advisor import AdvisorAgent
 from src.agents.onboarding import OnboardingAgent
 from src.agents.orchestrator import OrchestratorAgent
 from src.agents.setup import SetupAgent
+from src.tools.advisor.get_inferred_values import GetInferredValuesTool
+from src.tools.advisor.get_observed_patterns import GetObservedPatternsTool
+from src.tools.advisor.get_user_full_history import GetUserFullHistoryTool
 from src.tools.examples.get_calendar_events import GetCalendarEventsTool
 from src.tools.examples.get_current_date import GetCurrentDateTool
 from src.tools.examples.get_user_preferences import GetUserPreferencesTool
@@ -61,6 +64,9 @@ class AgentFactory:
             registry.register(GetCurrentDateTool())
             registry.register(GetUserPreferencesTool())
             registry.register(GetCalendarEventsTool())
+            registry.register(GetUserFullHistoryTool())
+            registry.register(GetObservedPatternsTool())
+            registry.register(GetInferredValuesTool())
 
         self._registries[agent_name] = registry
         return registry

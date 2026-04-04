@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, delete, func, select
@@ -33,6 +34,26 @@ async def list_habits(
     stmt = stmt.order_by(Habit.created_at.desc())
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+async def get_today_log_map(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    habit_ids: list[uuid.UUID],
+    user_timezone: str = "UTC",
+) -> dict[uuid.UUID, HabitLog]:
+    """Return a {habit_id → HabitLog} map for today's logs. Single query."""
+    if not habit_ids:
+        return {}
+    today = datetime.now(ZoneInfo(user_timezone)).date()
+    result = await db.execute(
+        select(HabitLog).where(
+            HabitLog.user_id == user_id,
+            HabitLog.date == today,
+            HabitLog.habit_id.in_(habit_ids),
+        )
+    )
+    return {log.habit_id: log for log in result.scalars()}
 
 
 async def get_habit(db: AsyncSession, user_id: uuid.UUID, habit_id: uuid.UUID) -> Habit:

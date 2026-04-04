@@ -20,6 +20,7 @@ from src.schemas.habit import (
     HabitUpdate,
 )
 from src.services import habit as habit_service
+from src.services import preferences as preferences_service
 
 router = APIRouter(prefix="/me/habits", tags=["Habits"])
 
@@ -33,11 +34,26 @@ async def list_habits(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[HabitResponse]:
-    """List current user's habits."""
+    """List current user's habits with today's log status."""
     habits = await habit_service.list_habits(
         db, current_user.id, is_active=is_active, is_archived=is_archived
     )
-    return [HabitResponse.model_validate(h) for h in habits]
+    prefs = await preferences_service.get_user_preferences(db, current_user.id)
+    today_log_map = await habit_service.get_today_log_map(
+        db, current_user.id, [h.id for h in habits], prefs.timezone
+    )
+    return [
+        HabitResponse.model_validate(h).model_copy(
+            update={
+                "today_log": (
+                    HabitLogResponse.model_validate(today_log_map[h.id])
+                    if h.id in today_log_map
+                    else None
+                )
+            }
+        )
+        for h in habits
+    ]
 
 
 @router.post("", response_model=HabitResponse, status_code=status.HTTP_201_CREATED)
