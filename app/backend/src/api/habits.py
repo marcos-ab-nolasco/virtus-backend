@@ -20,6 +20,7 @@ from src.schemas.habit import (
     HabitUpdate,
 )
 from src.services import habit as habit_service
+from src.services import preferences as preferences_service
 
 router = APIRouter(prefix="/me/habits", tags=["Habits"])
 
@@ -37,8 +38,9 @@ async def list_habits(
     habits = await habit_service.list_habits(
         db, current_user.id, is_active=is_active, is_archived=is_archived
     )
+    prefs = await preferences_service.get_user_preferences(db, current_user.id)
     today_log_map = await habit_service.get_today_log_map(
-        db, current_user.id, [h.id for h in habits]
+        db, current_user.id, [h.id for h in habits], prefs.timezone
     )
     return [
         HabitResponse.model_validate(h).model_copy(

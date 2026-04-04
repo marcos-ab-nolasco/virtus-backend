@@ -92,6 +92,9 @@ class GetUserFullHistoryTool(BaseTool):
                         "energizing_activities": insight.energizing_activities or [],
                         "recognized_skills": insight.recognized_skills or [],
                         "best_outcome": insight.best_outcome,
+                        "market_problems": insight.market_problems or [],
+                        "internal_obstacle": insight.internal_obstacle,
+                        "if_then_plan": insight.if_then_plan,
                     }
 
                 # Annual goals
