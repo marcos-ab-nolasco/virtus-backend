@@ -56,14 +56,40 @@ class AgentRouter:
             agent_response.response = agent_response.response or "Desculpe, tive um problema."
             return agent_response
 
-        # 2. Build user context for status-based routing
+        # 2. Goal creation conversations always go to GoalAgent
+        if context_type == ConversationContext.GOAL_CREATION or context_type == "GOAL_CREATION":
+            agent = self._factory.create_agent("goal")
+            agent.set_trace_context(user_id=str(user_id), conversation_id=str(conversation_id))
+            logger.info(
+                "Agent routing: goal creation conv user_id=%s conv_id=%s",
+                user_id,
+                conversation_id,
+            )
+
+            orchestrator = self._factory.create_orchestrator()
+            orchestrator.set_trace_context(
+                user_id=str(user_id), conversation_id=str(conversation_id)
+            )
+            user_context = await orchestrator._build_context(user_id)
+
+            goal_agent_response = await agent.process(
+                message=message,
+                user_context=user_context,
+                conversation_history=conversation_history,
+            )
+            goal_agent_response.response = (
+                goal_agent_response.response or "Desculpe, tive um problema."
+            )
+            return goal_agent_response
+
+        # 3. Build user context for status-based routing
         orchestrator = self._factory.create_orchestrator()
         orchestrator.set_trace_context(user_id=str(user_id), conversation_id=str(conversation_id))
         user_context = await orchestrator._build_context(user_id)
 
         onboarding_status = (user_context.get("profile") or {}).get("onboarding_status")
 
-        # 3. Users in setup flow (NOT_STARTED or IN_PROGRESS) → SetupAgent
+        # 4. Users in setup flow (NOT_STARTED or IN_PROGRESS) → SetupAgent
         if onboarding_status in (
             OnboardingStatus.NOT_STARTED,
             OnboardingStatus.IN_PROGRESS,
@@ -87,7 +113,7 @@ class AgentRouter:
             agent_response.response = agent_response.response or "Desculpe, tive um problema."
             return agent_response
 
-        # 4. Default: consult orchestrator for routing decision (advisor etc.)
+        # 5. Default: consult orchestrator for routing decision (advisor etc.)
         decision: AgentResponse = await orchestrator.process(
             message=message,
             user_context=user_context,
