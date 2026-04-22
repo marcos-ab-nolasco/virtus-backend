@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: SecretStr
     ENCRYPTION_KEY: SecretStr  # Fernet key for encrypting sensitive data (OAuth tokens, etc.)
-    ALGORITHM: str
+    ALGORITHM: Literal["HS256", "RS256", "ES256"] = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     REFRESH_TOKEN_COOKIE_NAME: str = "refresh_token"
@@ -54,8 +54,30 @@ class Settings(BaseSettings):
     DEV_UVICORN_RELOAD: bool = False
 
     # Environment
-    ENVIRONMENT: str = "development"
+    ENVIRONMENT: Literal["development", "test", "production"] = "development"
     LOG_LEVEL: str = "DEBUG"
+
+    @model_validator(mode="after")
+    def _validate_production_security(self) -> "Settings":
+        """Reject insecure configurations when ENVIRONMENT=production.
+
+        Defaults stay permissive for local DX (HTTP dev). Production enforcement
+        is centralized here so adding a new security variable is one `append`.
+        """
+        if self.ENVIRONMENT != "production":
+            return self
+
+        violations: list[str] = []
+
+        if not self.REFRESH_TOKEN_COOKIE_SECURE:
+            violations.append(
+                "REFRESH_TOKEN_COOKIE_SECURE must be True in production "
+                "(refresh cookie would be sent without the Secure flag over HTTP)"
+            )
+
+        if violations:
+            raise ValueError("Insecure production configuration:\n  - " + "\n  - ".join(violations))
+        return self
 
 
 @lru_cache
