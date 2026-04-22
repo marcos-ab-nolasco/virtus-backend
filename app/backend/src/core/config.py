@@ -1,8 +1,18 @@
 from functools import lru_cache
 from typing import Literal
 
+from cryptography.fernet import Fernet
 from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_KNOWN_INSECURE_SECRETS: frozenset[str] = frozenset(
+    {
+        "change-this-to-a-random-secret-key-in-production",
+        "generate-using-python-cryptography-fernet-generate-key",
+    }
+)
+
+_SAFE_PRODUCTION_LOG_LEVELS: frozenset[str] = frozenset({"INFO", "WARNING", "ERROR", "CRITICAL"})
 
 
 class Settings(BaseSettings):
@@ -73,6 +83,27 @@ class Settings(BaseSettings):
             violations.append(
                 "REFRESH_TOKEN_COOKIE_SECURE must be True in production "
                 "(refresh cookie would be sent without the Secure flag over HTTP)"
+            )
+
+        if self.SECRET_KEY.get_secret_value() in _KNOWN_INSECURE_SECRETS:
+            violations.append("SECRET_KEY is a placeholder from .env.example")
+
+        encryption_key = self.ENCRYPTION_KEY.get_secret_value()
+        if encryption_key in _KNOWN_INSECURE_SECRETS:
+            violations.append("ENCRYPTION_KEY is a placeholder from .env.example")
+        else:
+            try:
+                Fernet(encryption_key.encode())
+            except (ValueError, TypeError):
+                violations.append(
+                    "ENCRYPTION_KEY is not a valid Fernet key "
+                    "(must be 32 url-safe base64-encoded bytes)"
+                )
+
+        if self.LOG_LEVEL not in _SAFE_PRODUCTION_LOG_LEVELS:
+            violations.append(
+                f"LOG_LEVEL={self.LOG_LEVEL!r} may expose sensitive data in production "
+                f"(allowed: {sorted(_SAFE_PRODUCTION_LOG_LEVELS)})"
             )
 
         if violations:
