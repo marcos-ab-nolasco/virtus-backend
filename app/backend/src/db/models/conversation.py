@@ -23,6 +23,7 @@ class ConversationContext(enum.StrEnum):
     CHECK_IN = "CHECK_IN"
     REVIEW = "REVIEW"
     FREE_CHAT = "FREE_CHAT"
+    GOAL_CREATION = "GOAL_CREATION"
 
 
 class InteractionChannel(enum.StrEnum):

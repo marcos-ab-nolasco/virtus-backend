@@ -1,6 +1,7 @@
 """Tests for habits API endpoints."""
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import AsyncClient
@@ -249,7 +250,8 @@ async def test_list_habits_includes_today_log(client: AsyncClient, auth_headers:
     )
     assert create_resp.status_code == 201
     habit_id = create_resp.json()["id"]
-    today = date.today().isoformat()
+    # Use UTC date to match the default user timezone (UTC) used by get_today_log_map
+    today = datetime.now(ZoneInfo("UTC")).date().isoformat()
 
     log_resp = await client.post(
         f"/api/v1/me/habits/{habit_id}/logs",

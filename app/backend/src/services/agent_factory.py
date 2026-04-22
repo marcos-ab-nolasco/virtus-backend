@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.agents.advisor import AdvisorAgent
+from src.agents.goal_agent import GoalAgent
 from src.agents.onboarding import OnboardingAgent
 from src.agents.orchestrator import OrchestratorAgent
 from src.agents.setup import SetupAgent
@@ -16,6 +17,7 @@ from src.tools.advisor.get_user_full_history import GetUserFullHistoryTool
 from src.tools.examples.get_calendar_events import GetCalendarEventsTool
 from src.tools.examples.get_current_date import GetCurrentDateTool
 from src.tools.examples.get_user_preferences import GetUserPreferencesTool
+from src.tools.goal_tools import ListUserGoalsTool, UpdateGoalStatusTool
 from src.tools.onboarding_tools import (
     AdvancePhaseTool,
     SaveAnnualGoalTool,
@@ -67,6 +69,11 @@ class AgentFactory:
             registry.register(GetUserFullHistoryTool())
             registry.register(GetObservedPatternsTool())
             registry.register(GetInferredValuesTool())
+        elif agent_name == "goal":
+            registry.register(ListUserGoalsTool(db_session=self._db))
+            registry.register(UpdateGoalStatusTool(db_session=self._db))
+            registry.register(SaveAnnualGoalTool(db_session=self._db))
+            registry.register(SaveMonthlyObjectiveTool(db_session=self._db))
 
         self._registries[agent_name] = registry
         return registry
@@ -79,7 +86,9 @@ class AgentFactory:
             context_service=self._context,
         )
 
-    def create_agent(self, agent_name: str) -> SetupAgent | OnboardingAgent | AdvisorAgent:
+    def create_agent(
+        self, agent_name: str
+    ) -> SetupAgent | OnboardingAgent | AdvisorAgent | GoalAgent:
         if agent_name == "setup":
             registry = self._get_registry(agent_name)
             return SetupAgent(
@@ -97,6 +106,13 @@ class AgentFactory:
         if agent_name == "advisor":
             registry = self._get_registry(agent_name)
             return AdvisorAgent(
+                llm_service=self._llm,
+                tool_registry=registry,
+            )
+
+        if agent_name == "goal":
+            registry = self._get_registry(agent_name)
+            return GoalAgent(
                 llm_service=self._llm,
                 tool_registry=registry,
             )

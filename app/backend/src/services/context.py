@@ -57,7 +57,9 @@ async def build_permanent_context(db: AsyncSession, user_id: uuid.UUID) -> dict:
     integrations = list(integrations_result.scalars().all())
 
     # Load deep onboarding data (tolerant — empty is valid)
-    life_areas, onboarding_insight, annual_goals = await _load_deep_onboarding_data(db, user_id)
+    life_areas, onboarding_insight, annual_goals, monthly_objectives = (
+        await _load_deep_onboarding_data(db, user_id)
+    )
 
     # Build context structure
     context = {
@@ -72,6 +74,7 @@ async def build_permanent_context(db: AsyncSession, user_id: uuid.UUID) -> dict:
         "life_areas": life_areas,
         "deep_insights": onboarding_insight,
         "annual_goals": annual_goals,
+        "monthly_objectives": monthly_objectives,
     }
 
     return context
@@ -79,17 +82,23 @@ async def build_permanent_context(db: AsyncSession, user_id: uuid.UUID) -> dict:
 
 async def _load_deep_onboarding_data(
     db: AsyncSession, user_id: uuid.UUID
-) -> tuple[list[dict[str, Any]], dict[str, Any] | None, list[dict[str, Any]]]:
-    """Load LifeAreaScore, OnboardingInsight, AnnualGoal for the user.
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None, list[dict[str, Any]], list[dict[str, Any]]]:
+    """Load LifeAreaScore, OnboardingInsight, AnnualGoal, MonthlyObjective for the user.
 
     All queries are tolerant — returns empty lists / None if no data exists.
     """
     life_areas: list[dict[str, Any]] = []
     onboarding_insight: dict[str, Any] | None = None
     annual_goals: list[dict[str, Any]] = []
+    monthly_objectives: list[dict[str, Any]] = []
 
     try:
-        from src.db.models.planning import AnnualGoal, LifeAreaScore, OnboardingInsight
+        from src.db.models.planning import (
+            AnnualGoal,
+            LifeAreaScore,
+            MonthlyObjective,
+            OnboardingInsight,
+        )
 
         # LifeAreaScore
         la_result = await db.execute(select(LifeAreaScore).where(LifeAreaScore.user_id == user_id))
@@ -134,6 +143,24 @@ async def _load_deep_onboarding_data(
                     "life_area": goal.life_area,
                     "target_year": goal.target_year,
                     "priority": goal.priority,
+                    "status": goal.status,
+                }
+            )
+
+        # MonthlyObjective (active only)
+        obj_result = await db.execute(
+            select(MonthlyObjective).where(
+                MonthlyObjective.user_id == user_id,
+                MonthlyObjective.is_active.is_(True),
+            )
+        )
+        for obj in obj_result.scalars().all():
+            monthly_objectives.append(
+                {
+                    "id": str(obj.id),
+                    "description": obj.description,
+                    "annual_goal_id": str(obj.annual_goal_id) if obj.annual_goal_id else None,
+                    "status": obj.status,
                 }
             )
 
@@ -143,7 +170,7 @@ async def _load_deep_onboarding_data(
             user_id,
         )
 
-    return life_areas, onboarding_insight, annual_goals
+    return life_areas, onboarding_insight, annual_goals, monthly_objectives
 
 
 def _build_preferences_context(prefs: UserPreferences) -> dict:
